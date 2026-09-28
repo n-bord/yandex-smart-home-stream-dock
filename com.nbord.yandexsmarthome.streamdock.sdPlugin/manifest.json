@@ -1,0 +1,386 @@
+{
+  "Actions": [
+    {
+      "Icon": "static/icons/device.png",
+      "Name": "Устройство — Вкл/Выкл",
+      "States": [
+        {
+          "Image": "static/icons/device_off.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        },
+        {
+          "Image": "static/icons/device_on.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Включить, выключить или переключить устройство (кроме света)",
+      "UUID": "com.yandex.smarthome.streamdock.toggle",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/light.png",
+      "Name": "Свет — Вкл/Выкл",
+      "States": [
+        {
+          "Image": "static/icons/light_off.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        },
+        {
+          "Image": "static/icons/light_on.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Включить/выключить отдельную лампу или группу света",
+      "UUID": "com.yandex.smarthome.streamdock.light.power",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/brightness.png",
+      "Name": "Свет — Яркость",
+      "States": [
+        {
+          "Image": "static/icons/brightness.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — яркость, нажатие — вкл/выкл",
+      "UUID": "com.yandex.smarthome.streamdock.brightness",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/sensor.png",
+      "Name": "Датчик — Показание",
+      "States": [
+        {
+          "Image": "static/icons/sensor.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Keypad",
+        "Information",
+        "SecondaryScreen"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Показывает одно выбранное показание датчика на клавише или информационной доске",
+      "UUID": "com.yandex.smarthome.streamdock.sensor",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/sensor.png",
+      "Name": "Датчик — Показатели",
+      "States": [
+        {
+          "Image": "static/icons/sensor.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "9"
+        }
+      ],
+      "Controllers": [
+        "Keypad",
+        "Knob",
+        "Information",
+        "SecondaryScreen"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Клавиша/инфодоска — до трёх показателей; крутилка — листание показателей",
+      "UUID": "com.yandex.smarthome.streamdock.sensor.multi",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/curtain.png",
+      "Name": "Шторы — Положение",
+      "States": [
+        {
+          "Image": "static/icons/curtain.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — положение, нажатие — открыть/закрыть",
+      "UUID": "com.yandex.smarthome.streamdock.curtain",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/vacuum.png",
+      "Name": "Пылесос — Скорость",
+      "States": [
+        {
+          "Image": "static/icons/vacuum.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — скорость работы, нажатие — вкл/выкл",
+      "UUID": "com.yandex.smarthome.streamdock.vacuum.speed",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/device.png",
+      "Name": "Очиститель / Вентилятор",
+      "States": [
+        {
+          "Image": "static/icons/device.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — режим или скорость, нажатие — питание",
+      "UUID": "com.yandex.smarthome.streamdock.climate.mode",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/kettle.png",
+      "Name": "Чайник — Температура",
+      "States": [
+        {
+          "Image": "static/icons/kettle.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — температура нагрева, нажатие — вкл/выкл",
+      "UUID": "com.yandex.smarthome.streamdock.kettle.temperature",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/light_temp.png",
+      "Name": "Свет — Температура",
+      "States": [
+        {
+          "Image": "static/icons/light_temp.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — от тёплого к холодному, нажатие — вкл/выкл",
+      "UUID": "com.yandex.smarthome.streamdock.light.temperature",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/color.png",
+      "Name": "Свет — Цвета (крутилка)",
+      "States": [
+        {
+          "Image": "static/icons/color.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — переключать цвета и сразу применять, нажатие — вкл/выкл",
+      "UUID": "com.yandex.smarthome.streamdock.light.color.dial",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/color.png",
+      "Name": "Свет — Цвет",
+      "States": [
+        {
+          "Image": "static/icons/color.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Установить выбранный цвет лампы",
+      "UUID": "com.yandex.smarthome.streamdock.light.color",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/color.png",
+      "Name": "Свет — Пресет",
+      "States": [
+        {
+          "Image": "static/icons/color.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Пресет света: питание, яркость, температура и цвет",
+      "UUID": "com.yandex.smarthome.streamdock.light.preset",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/media.png",
+      "Name": "Телевизор / ИК — Громкость",
+      "States": [
+        {
+          "Image": "static/icons/media.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — громкость, нажатие — mute или питание",
+      "UUID": "com.yandex.smarthome.streamdock.media.volume",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/media.png",
+      "Name": "Телевизор / ИК — Каналы",
+      "States": [
+        {
+          "Image": "static/icons/media.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Knob"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Вращение — каналы, нажатие — питание",
+      "UUID": "com.yandex.smarthome.streamdock.media.channel",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/ir.png",
+      "Name": "ИК / Пульт — Команда",
+      "States": [
+        {
+          "Image": "static/icons/ir.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Команды ИК-устройств: питание, режим, температура, скорость, громкость и другое",
+      "UUID": "com.yandex.smarthome.streamdock.media.command",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/plugin.png",
+      "Name": "Умный дом — Панель / Сводка",
+      "States": [
+        {
+          "Image": "static/icons/plugin.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "10"
+        }
+      ],
+      "Controllers": [
+        "Keypad",
+        "Information",
+        "SecondaryScreen"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "Tooltip": "На клавише открывает панель умного дома; на информационной доске показывает сводку дома",
+      "UUID": "com.yandex.smarthome.streamdock.dashboard",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    },
+    {
+      "Icon": "static/icons/scenario.png",
+      "Name": "Сценарий — Запустить / Крутилка",
+      "States": [
+        {
+          "Image": "static/icons/scenario.png",
+          "TitleAlignment": "bottom",
+          "FontSize": "11"
+        }
+      ],
+      "Controllers": [
+        "Keypad",
+        "Knob"
+      ],
+      "UserTitleEnabled": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Клавиша — запускает выбранный сценарий; крутилка — выбирает избранный сценарий вращением и запускает нажатием",
+      "UUID": "com.yandex.smarthome.streamdock.scenario",
+      "PropertyInspectorPath": "propertyInspector/action1/index.html"
+    }
+  ],
+  "SDKVersion": 2,
+  "Author": "nbord",
+  "Name": "Яндекс Умный дом [n-bord]",
+  "Icon": "static/icons/plugin.png",
+  "CategoryIcon": "static/icons/plugin.png",
+  "Description": "Неофициальный любительский плагин «Яндекс Умный дом» для совместимых устройств Stream Dock на macOS от nbord. Не связан с компанией Яндекс и сервисом «Умный дом» от Яндекса и не поддерживается ими.",
+  "Category": "Яндекс Умный дом [n-bord]",
+  "Version": "1.0.0",
+  "CodePathMac": "plugin/index.js",
+  "URL": "https://github.com/n-bord/yandex-smart-home-stream-dock",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.14"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "3.10.188.226"
+  },
+  "Nodejs": {
+    "Version": "20"
+  }
+}

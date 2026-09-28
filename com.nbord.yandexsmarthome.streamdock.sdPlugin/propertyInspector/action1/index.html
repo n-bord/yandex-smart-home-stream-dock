@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Яндекс Умный дом [n-bord]</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <div class="topline">
+      <div><div class="brand">Яндекс Умный дом [n-bord]</div><div id="actionName" class="subtitle">Настройки действия · nbord</div></div>
+      <span id="backendBadge" class="badge">Backend…</span>
+    </div>
+
+    <section class="card">
+      <div id="deviceSection">
+        <div class="section-title">Устройство</div>
+        <label id="deviceLabel" for="device">Устройство</label>
+        <select id="device" disabled><option value="">Ожидание подключения…</option></select>
+      </div>
+
+      <div id="scenarioSettings" class="action-settings hidden">
+        <div class="section-title">Сценарий</div>
+        <label for="scenario">Сценарий Яндекс Умного дома</label>
+        <select id="scenario" disabled><option value="">Ожидание подключения…</option></select>
+        <label for="scenarioDialSource">Сценарии на крутилке</label>
+        <select id="scenarioDialSource"><option value="favorites">Только избранные ★</option><option value="all">Все сценарии</option></select>
+        <div class="hint">На клавише запускается выбранный сценарий. На крутилке вращение выбирает сценарий, нажатие запускает его. Избранные берутся из раздела «Избранное» панели.</div>
+      </div>
+
+      <div id="powerSettings" class="action-settings hidden">
+        <label for="powerMode">Команда при нажатии</label>
+        <select id="powerMode"><option value="toggle">Переключить Вкл/Выкл</option><option value="on">Только включить</option><option value="off">Только выключить</option></select>
+        <div class="hint">Для ИК-устройств без обратной связи лучше выбрать явную команду «Включить» или «Выключить».</div>
+      </div>
+
+      <div id="brightnessSettings" class="action-settings hidden">
+        <label for="brightnessStep">Чувствительность крутилки, %</label><select id="brightnessStep"><option value="1">1% — точно</option><option value="5">5% — обычно</option><option value="10">10% — быстро</option><option value="20">20% — крупный шаг</option></select>
+        <label class="check-row"><input id="brightnessAcceleration" type="checkbox" checked><span>Плавное ускорение вращения</span></label>
+        <div id="precisionHint" class="hint">С ускорением: медленно — выбранный шаг, быстро — до 10% за щелчок.</div>
+      </div>
+
+      <div id="sensorSettings" class="action-settings hidden">
+        <label for="sensorProperty">Показание</label><select id="sensorProperty" disabled><option value="">Выберите устройство</option></select>
+        <div class="subcard">
+          <label class="check-row"><input id="sensorThresholdEnabled" type="checkbox"><span>Цветовые пороги</span></label>
+          <div class="grid-2"><div><label for="sensorWarn">Предупреждение</label><input id="sensorWarn" type="number" step="any" placeholder="например 900"></div><div><label for="sensorDanger">Критично</label><input id="sensorDanger" type="number" step="any" placeholder="например 1200"></div></div>
+          <label for="sensorDirection">Когда значение хуже</label><select id="sensorDirection"><option value="high">чем выше, тем хуже</option><option value="low">чем ниже, тем хуже</option></select>
+        </div>
+        <div class="subcard sensor-style-card">
+          <label for="sensorSingleStyle">Стиль отображения</label>
+          <select id="sensorSingleStyle">
+            <option value="widget">Виджет — иконка и цветная карточка</option>
+            <option value="minimal">Минималистичный — крупное значение</option>
+          </select>
+          <div class="style-preview-row">
+            <div class="style-preview widget"><span class="preview-icon">CO₂</span><span><b>972</b><small>ppm</small></span></div>
+            <div class="style-preview minimal"><small>CO₂</small><b>972</b><i>ppm</i></div>
+          </div>
+          <div class="hint">Одинаковый стиль используется на клавише и в информационной доске.</div>
+        </div>
+        <div id="sensorHint" class="hint">Показание обновляется автоматически.</div>
+      </div>
+
+      <div id="combinedSensorSettings" class="action-settings hidden">
+        <label for="combinedProperties">Показания</label>
+        <select id="combinedProperties" multiple size="6" disabled></select>
+        <div class="hint">Выберите показатели для карточки. На клавише показываются до трёх значений на странице, на информационной доске — первые три выбранных, на крутилке они листаются вращением.</div>
+        <div class="subcard sensor-style-card">
+          <label for="sensorDialStyle">Стиль отображения</label>
+          <select id="sensorDialStyle">
+            <option value="widget">Виджет — иконка и цветная карточка</option>
+            <option value="minimal">Минималистичный — крупное значение</option>
+          </select>
+          <div class="style-preview-row">
+            <div class="style-preview widget"><span class="preview-icon">CO₂</span><span><b>972</b><small>ppm</small></span></div>
+            <div class="style-preview minimal"><small>CO₂</small><b>972</b><i>ppm</i></div>
+          </div>
+          <div class="hint">Стиль применяется к клавише, крутилке и информационной доске. На крутилке: вращение — переключить показатель, нажатие — обновить.</div>
+        </div>
+      </div>
+
+      <div id="curtainSettings" class="action-settings hidden">
+        <label for="curtainStep">Чувствительность крутилки, %</label><select id="curtainStep"><option value="1">1% — точно</option><option value="5">5% — обычно</option><option value="10">10% — быстро</option><option value="20">20% — крупный шаг</option></select>
+        <label class="check-row"><input id="curtainAcceleration" type="checkbox" checked><span>Плавное ускорение вращения</span></label>
+        <label class="check-row"><input id="curtainReverse" type="checkbox"><span>Реверс положения штор</span></label>
+        <div id="curtainHint" class="hint"></div>
+        <div class="hint">Включите реверс, если 60% в Яндексе физически выглядит как 40% открытия.</div>
+      </div>
+
+      <div id="vacuumSettings" class="action-settings hidden"><div class="hint">Вращение переключает режимы <b>work_speed</b>, нажатие включает/выключает пылесос.</div></div>
+
+      <div id="climateSettings" class="action-settings hidden">
+        <label for="climateModeInstance">Что менять крутилкой</label><select id="climateModeInstance" disabled><option value="">Выберите устройство</option></select>
+        <div class="hint">Для очистителя/вентилятора автоматически доступны скорость, режим вентиляции и другие mode-capabilities устройства. Нажатие крутилки — питание.</div>
+      </div>
+
+      <div id="kettleSettings" class="action-settings hidden">
+        <label for="temperatureStep">Шаг температуры, °C</label><input id="temperatureStep" type="number" min="1" max="25" step="1" value="5">
+        <div id="temperatureHint" class="hint"></div>
+      </div>
+
+      <div id="lightTempSettings" class="action-settings hidden">
+        <label for="colorTemperatureStep">Шаг температуры света, K</label><input id="colorTemperatureStep" type="number" min="50" max="1000" step="50" value="250">
+        <div id="colorTemperatureHint" class="hint"></div>
+      </div>
+
+      <div id="colorDialSettings" class="action-settings hidden">
+        <div class="hint"><b>Вращение:</b> перелистывает палитру и сразу меняет цвет лампы. <b>Нажатие:</b> включает/выключает свет. Текущий цвет и его название отображаются на экране крутилки.</div>
+      </div>
+
+      <div id="colorSettings" class="action-settings hidden">
+        <label for="colorPreset">Цвет кнопки</label>
+        <select id="colorPreset">
+          <option value="white">Белый</option><option value="red">Красный</option><option value="green">Зелёный</option><option value="blue">Синий</option><option value="yellow">Жёлтый</option><option value="orange">Оранжевый</option><option value="purple">Фиолетовый</option><option value="pink">Розовый</option><option value="cyan">Бирюзовый</option>
+        </select>
+        <div class="hint">Создайте несколько кнопок этого действия — например отдельную белую и отдельную красную.</div>
+      </div>
+
+      <div id="lightPresetSettings" class="action-settings hidden">
+        <label for="presetName">Название пресета</label><input id="presetName" maxlength="18" placeholder="Например: Кино">
+        <label class="check-row"><input id="presetPower" type="checkbox" checked><span>Включить свет</span></label>
+        <label class="check-row"><input id="presetUseBrightness" type="checkbox" checked><span>Задать яркость</span></label>
+        <input id="presetBrightness" type="number" min="1" max="100" step="1" value="50">
+        <label class="check-row"><input id="presetUseTemperature" type="checkbox"><span>Задать температуру белого света</span></label>
+        <input id="presetTemperature" type="number" min="1500" max="10000" step="100" value="3000">
+        <label for="presetColor">Цвет</label><select id="presetColor"><option value="none">Не менять</option><option value="white">Белый</option><option value="red">Красный</option><option value="green">Зелёный</option><option value="blue">Синий</option><option value="yellow">Жёлтый</option><option value="orange">Оранжевый</option><option value="purple">Фиолетовый</option><option value="pink">Розовый</option><option value="cyan">Бирюзовый</option></select>
+        <div class="hint">Если выбран цвет, он применяется вместо температуры белого света.</div>
+      </div>
+
+      <div id="mediaVolumeSettings" class="action-settings hidden">
+        <label for="mediaVolumeStep">Шаг громкости за один щелчок крутилки</label>
+        <select id="mediaVolumeStep"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option><option value="10">10</option></select>
+        <div class="hint">Для ИК-пульта текущее значение громкости неизвестно: крутилка отправляет только относительные команды «громче/тише». По умолчанию используется шаг 1.</div>
+      </div>
+
+      <div id="mediaSettings" class="action-settings hidden">
+        <label for="mediaCommand">Команда ТВ / ИК</label><select id="mediaCommand" disabled><option value="">Выберите устройство</option></select>
+        <div class="hint">В этом действии показываются только устройства, похожие на виртуальные ИК/медиа-устройства Яндекс Пульта. Очистители, розетки, чайники и другие обычные устройства сюда не добавляются.</div>
+      </div>
+
+      <div id="dashboardActionSettings" class="action-settings hidden">
+        <label for="infoTemplate">Шаблон информационной доски</label>
+        <select id="infoTemplate">
+          <option value="home">Дом — сеть, свет и офлайн</option>
+          <option value="climate">Климат — температура, влажность и CO₂</option>
+          <option value="alerts">Состояние — офлайн, батареи и тревоги</option>
+          <option value="favorites">Избранное — устройства и сценарии</option>
+        </select>
+        <div class="hint"><b>На клавише</b> действие открывает полноценную панель. <b>На информационной доске или дополнительном экране Stream Dock</b> отображается выбранный живой шаблон. Для отдельного датчика можно использовать действия «Датчик — Показание» или «Датчик — Показатели».</div>
+      </div>
+
+      <div id="deviceButtons" class="buttons"><button id="refresh" disabled>Обновить устройства</button><button id="refreshState" disabled>Обновить состояние</button></div>
+      <div id="meta" class="meta"></div>
+    </section>
+
+    <button id="dashboard" class="dashboard-btn">Открыть панель умного дома</button>
+    <div id="status" class="status">Ожидание запуска…</div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+<head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="light dark" name="color-scheme"/><title>Яндекс Умный дом [n-bord] — Панель</title><link href="style.css?v=1.0.0" rel="stylesheet"/></head>
+<body>
+<div class="app">
+<aside class="sidebar">
+<div class="brand-row"><img class="brand-icon" src="../static/icons/plugin.png"/><div><div class="brand">Яндекс Умный дом</div><div class="brand-sub">Плагин для Stream Dock [nbord]</div></div></div>
+<div class="nav-title">Умный дом</div>
+<button aria-current="page" class="nav active" data-page="devices"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"></path><path d="M5.5 10.5V20h13v-9.5"></path><path d="M9.5 20v-6h5v6"></path></svg></span><b>Устройства</b></button>
+<button class="nav" data-page="favorites"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.3 6.1-.9L12 3Z"></path></svg></span><b>Избранное</b></button>
+<button class="nav" data-page="scenarios"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 5.5v13L19 12 8 5.5Z"></path></svg></span><b>Сценарии</b></button>
+<button class="nav" data-page="statistics"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 20V10"></path><path d="M10 20V4"></path><path d="M16 20v-7"></path><path d="M22 20V7"></path></svg></span><b>Статистика</b></button>
+<button class="nav" data-page="settings"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg></span><b>Настройки</b></button>
+
+<button class="nav" data-page="about"><span class="nav-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v7"></path><path d="M12 7h.01"></path></svg></span><b>О плагине</b></button>
+<div aria-label="Настройки панели" class="sidebar-panel-settings">
+<div class="sidebar-settings-title">Панель</div>
+<div class="sidebar-setting-group sidebar-content-only">
+<div class="sidebar-setting-label">Вид карточек</div>
+<div aria-label="Вид карточек" class="sidebar-view-options" role="group">
+<button data-view-preset="compact" title="Компактный вид" type="button"><span>▤</span><b>Компактный</b></button>
+<button class="active" data-view-preset="normal" title="Обычный вид" type="button"><span>▦</span><b>Обычный</b></button>
+<button data-view-preset="informative" title="Информативный вид" type="button"><span>▥</span><b>Информативный</b></button>
+</div>
+</div>
+<div class="sidebar-setting-group sidebar-content-only sidebar-hidden-group">
+<div class="sidebar-setting-label">Отображение</div>
+<button class="sidebar-hidden-toggle" disabled id="hiddenEntitiesToggle" type="button"><span class="sidebar-hidden-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle><path d="M4 4l16 16"></path></svg></span><span class="sidebar-hidden-copy"><b>Скрытые устройства</b><small>0 скрыто</small></span></button>
+</div>
+<div class="sidebar-setting-group">
+<div class="sidebar-setting-label">Тема</div>
+<div aria-label="Тема панели" class="theme-switch sidebar-theme-switch" role="group">
+<button aria-label="Светлая тема" id="themeLight" title="Светлая тема" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg><span>Светлая</span></button>
+<button aria-label="Тёмная тема" id="themeDark" title="Тёмная тема" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z"></path></svg><span>Тёмная</span></button>
+</div>
+</div>
+
+
+
+</div>
+
+<div class="side-bottom"><div class="side-status" id="sideStatus"><span class="dot"></span><span>Подключение…</span></div><div class="version" id="sideVersion">v1.0.0</div></div>
+</aside>
+<main class="main">
+<section class="page active" id="page-devices">
+<div class="page-head"><div class="page-title-block"><h1>Умный дом</h1><p>Комнаты, группы, устройства и датчики — всё под контролем.</p></div><div class="head-actions"><button class="btn subtle-btn reset-order-btn hidden" id="resetOrder" type="button">Сбросить</button><button aria-pressed="false" class="btn subtle-btn order-btn" id="reorderToggle" type="button">Порядок</button></div></div>
+<div class="summary-grid"><div class="summary-card tone-online"><div class="summary-copy"><span>В сети</span><strong id="summaryOnline">0</strong><small>устройств</small></div><div class="summary-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><rect height="18" rx="2" width="10" x="7" y="3"></rect><path d="M10 17h4"></path></svg></div></div><div class="summary-card tone-offline"><div class="summary-copy"><span>Не в сети</span><strong id="summaryOffline">0</strong><small>устройств</small></div><div class="summary-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="m7 17 10-10"></path></svg></div></div><div class="summary-card tone-light"><div class="summary-copy"><span>Свет</span><strong id="summaryLights">0</strong><small>устройств</small></div><div class="summary-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 18h6"></path><path d="M10 21h4"></path><path d="M8.3 15.2A7 7 0 1 1 15.7 15.2c-.8.7-1.2 1.5-1.2 2.3h-5c0-.8-.4-1.6-1.2-2.3Z"></path></svg></div></div><div class="summary-card tone-groups"><div class="summary-copy"><span>Группы</span><strong id="summaryGroups">0</strong><small>групп</small></div><div class="summary-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m12 3 8 4-8 4-8-4 8-4Z"></path><path d="m4 12 8 4 8-4"></path><path d="m4 17 8 4 8-4"></path></svg></div></div><div class="summary-card wide tone-updated summary-updated-card"><div class="summary-copy"><span>Обновлено</span><strong id="summaryUpdated">—</strong><small>сегодня</small></div><div class="summary-card-tools"><button aria-label="Обновить" class="summary-tool refresh-tool" id="refreshDevices" title="Обновить" type="button"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M6.1 9A7 7 0 0 1 18.5 6.5L20 8"></path><path d="M17.9 15A7 7 0 0 1 5.5 17.5L4 16"></path></svg></button></div></div></div>
+<div class="toolbar"><div class="search-wrap"><span class="search-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg></span><input aria-autocomplete="list" aria-controls="searchSuggestions" autocomplete="off" class="search" id="search" placeholder="Найти устройство, комнату или тип…"/><div class="search-suggestions hidden" id="searchSuggestions" role="listbox"></div></div><div class="count" id="deviceCount">0 устройств</div></div>
+<div class="filters" id="categoryFilters"></div><div class="section-quicknav" id="sectionQuickNav"></div>
+<div aria-live="polite" class="empty" id="devicesEmpty">Загрузка устройств…</div><div class="device-list" id="devicesList"></div>
+</section>
+<section class="page" id="page-favorites">
+<div class="page-head"><div><h1>Избранное</h1><p>Быстрый доступ к любимым устройствам, группам и сценариям.</p></div><div class="head-actions"><button class="btn subtle-btn reset-order-btn hidden" id="favoritesResetOrder" type="button">Сбросить</button><button aria-pressed="false" class="btn subtle-btn order-btn" id="favoritesReorderToggle" type="button">Порядок</button></div></div>
+<div class="empty hidden" id="favoritesEmpty">Пока нет избранного. Нажмите ★ на карточке устройства или сценария.</div>
+<div class="favorites-block"><div class="subsection-title favorites-title">Устройства и группы</div><div class="device-grid" id="favoritesDevices"></div></div>
+<div class="favorites-block"><div class="subsection-title favorites-title">Сценарии</div><div class="scenario-grid" id="favoritesScenarios"></div></div>
+</section>
+<section class="page" id="page-scenarios">
+<div class="page-head"><div><h1>Сценарии</h1><p>Сценарии из приложения «Дом с Алисой».</p></div><div class="head-actions"><button class="btn subtle-btn reset-order-btn hidden" id="scenariosResetOrder" type="button">Сбросить</button><button aria-pressed="false" class="btn subtle-btn order-btn" id="scenariosReorderToggle" type="button">Порядок</button></div></div>
+<div class="count scenario-count" id="scenarioCount"></div><div class="scenario-grid" id="scenariosList"></div><div class="empty hidden" id="scenariosEmpty">Сценарии не найдены.</div>
+</section>
+<section class="page" id="page-statistics">
+<div class="page-head"><div><h1>Статистика</h1><p>Локальная статистика использования кнопок, крутилок и сценариев.</p></div><div class="head-actions"><label class="usage-toggle" for="usageEnabled"><input checked="" id="usageEnabled" type="checkbox"/><span class="switch-track"><span class="switch-knob"></span></span><span>Собирать статистику</span></label><button class="btn" id="refreshUsage">Обновить</button><button class="btn danger-btn" id="clearUsage">Очистить</button></div></div>
+<div class="usage-summary-grid"><div class="summary-card"><span>Сегодня</span><strong id="usageToday">0</strong></div><div class="summary-card"><span>За 7 дней</span><strong id="usageWeek">0</strong></div><div class="summary-card"><span>Всего</span><strong id="usageTotal">0</strong></div><div class="summary-card"><span>Действий</span><strong id="usageUnique">0</strong></div></div>
+<div class="panel usage-panel"><div class="diag-section-head"><div><h2>Чаще всего используется</h2><p>Вращение крутилки считается одним использованием за жест, а не каждым щелчком.</p></div><span class="pill">7 дней</span></div><div class="empty hidden" id="usageEmpty">Статистика пока пустая. Используйте кнопки или сценарии на Stream Dock.</div><div class="usage-list" id="usageList"></div></div>
+<div class="notice usage-note" id="usageStateNote">Статистика хранится только локально на Mac. Для часто используемых устройств и сценариев можно сразу добавить ★ в «Избранное».</div>
+</section>
+
+
+<section class="page settings-page" id="page-settings">
+<div class="page-head settings-page-head"><div><h1>Настройки</h1><p>Обновление интерфейса и действий Stream Dock, подключение к Яндексу и инструменты диагностики.</p></div></div>
+<div aria-label="Разделы настроек" class="settings-tabs" role="tablist">
+<button aria-selected="true" class="settings-tab active" data-settings-tab="general" role="tab" type="button"><span class="settings-tab-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2"></circle><circle cx="8" cy="17" r="2"></circle></svg></span><span><b>Общие</b><small>Поведение панели</small></span></button>
+<button aria-selected="false" class="settings-tab" data-settings-tab="connection" role="tab" type="button"><span class="settings-tab-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9"></path><path d="M8.2 16.8 6 19a4 4 0 0 1-5.7-5.7l3.5-3.5a4 4 0 0 1 5.7 0"></path><path d="m15.8 7.2 2.2-2.2a4 4 0 0 1 5.7 5.7l-3.5 3.5a4 4 0 0 1-5.7 0"></path></svg></span><span><b>Подключение</b><small>OAuth и аккаунт</small></span></button>
+<button aria-selected="false" class="settings-tab" data-settings-tab="diagnostics" role="tab" type="button"><span class="settings-tab-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 13h4l2-6 4 12 3-9 2 3h5"></path></svg></span><span><b>Диагностика</b><small>Проверки и журнал</small></span></button>
+</div>
+<div class="settings-pane active" data-settings-pane="general">
+<div class="settings-grid">
+<section class="settings-card"><div class="settings-card-icon">↻</div><div class="settings-card-main"><h2>Обновление панели</h2><p>Как часто открытая панель запрашивает актуальные состояния устройств и групп.</p></div><label class="settings-field" for="autoRefreshSelect"><span>Интервал</span><select aria-label="Интервал автообновления панели" class="select settings-select" id="autoRefreshSelect"><option value="0">Выключено</option><option value="15">15 секунд</option><option value="30">30 секунд</option><option selected="" value="45">45 секунд</option><option value="60">1 минута</option><option value="300">5 минут</option><option value="900">15 минут</option><option value="1800">30 минут</option></select></label></section>
+<section class="settings-card"><div class="settings-card-icon">⟳</div><div class="settings-card-main"><h2>Обновление кнопок и ручек</h2><p>Как часто плагин обновляет состояние действий непосредственно на устройствах Stream Dock.</p></div><label class="settings-field" for="actionRefreshSelect"><span>Интервал</span><select aria-label="Интервал обновления кнопок и ручек" class="select settings-select" id="actionRefreshSelect"><option value="0">Только вручную</option><option value="15">15 секунд</option><option selected="" value="30">30 секунд</option><option value="45">45 секунд</option><option value="60">1 минута</option><option value="120">2 минуты</option><option value="300">5 минут</option></select></label></section>
+<section class="settings-card"><div class="settings-card-icon">⌂</div><div class="settings-card-main"><h2>Стартовая вкладка</h2><p>Раздел, который будет открываться первым при запуске панели.</p></div><label class="settings-field" for="startPageSelect"><span>Открывать</span><select aria-label="Стартовая вкладка панели" class="select settings-select" id="startPageSelect"><option value="devices">Устройства</option><option value="favorites">Избранное</option><option value="scenarios">Сценарии</option><option value="statistics">Статистика</option></select></label></section>
+
+</div>
+<div class="settings-note"><b>Как это работает:</b> «Обновление панели» относится только к открытому dashboard. «Обновление кнопок и ручек» управляет фоновым обновлением действий на подключённых устройствах Stream Dock. История датчиков сохраняется независимо.</div>
+<section class="settings-reset-card">
+  <div class="settings-reset-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg></div>
+  <div class="settings-reset-copy"><h2>Полный сброс плагина</h2><p>Удаляет OAuth-авторизацию, локальную историю показателей, статистику, кэш, порядок комнат и карточек, избранное, скрытые устройства и настройки действий для клавиш и крутилок.</p><small>Сами элементы на раскладке Stream Dock могут остаться на своих местах, но их привязки и параметры будут очищены при следующем появлении.</small></div>
+  <button class="btn danger-btn reset-plugin-btn" id="fullResetPlugin" type="button">Сбросить плагин…</button>
+</section>
+</div>
+<div class="settings-pane" data-settings-pane="connection"><div class="settings-section-head"><div><h2>Подключение</h2><p>Один OAuth-токен используется всеми действиями плагина.</p></div><span class="pill" id="connectionPill">Не проверено</span></div><div class="panel"><h2>Аккаунт Яндекса</h2><label for="dashboardToken">OAuth-токен</label><div class="input-row"><input autocomplete="off" id="dashboardToken" placeholder="OAuth-токен Яндекс" spellcheck="false" type="password"/><button class="btn primary" id="saveToken">Сохранить и проверить</button><button class="btn danger-btn" id="logoutToken">Выйти</button></div><p class="hint">Требуются доступы <b>iot:view</b> и <b>iot:control</b>. Токен хранится в глобальных настройках плагина. Можно вставить сам токен или полный URL результата OAuth — в этом случае плагин также сохранит срок действия из <code>expires_in</code>.</p><div id="tokenExpiryInfo" class="token-expiry-info hidden"></div><div class="notice" id="connectionStatus">Ожидание данных…</div></div><div class="panel token-help"><h2>Как получить токен</h2><ol><li>Откройте Яндекс OAuth и создайте приложение типа <b>«Для доступа к API или отладки»</b>.</li><li>Добавьте разрешения умного дома <code>iot:view</code> и <code>iot:control</code>.</li><li>Для приложения доступа к API используйте redirect URI <code>https://oauth.yandex.ru/verification_code</code>.</li><li>Получите OAuth-токен и вставьте его выше. После проверки он станет общим для всех кнопок и крутилок.</li></ol><div class="help-links"><a class="btn" data-external-url="https://oauth.yandex.ru/client/new/" href="https://oauth.yandex.ru/client/new/">Создать OAuth-приложение</a><a class="btn" data-external-url="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol" href="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol">Документация API</a></div></div></div>
+<div class="settings-pane" data-settings-pane="diagnostics"><div class="settings-section-head"><div><h2>Диагностика</h2><p>Живой журнал, проверки состояния и безопасные авто-тесты.</p></div></div><div class="panel diagnostics-log-panel">
+<div class="diag-toolbar">
+<label class="debug-toggle" for="debugMode"><input id="debugMode" type="checkbox"/><span class="switch-track"><span class="switch-knob"></span></span><span>Режим отладки</span></label>
+<div class="diag-actions"><button class="btn" id="clearDiagnosticLog">Очистить</button><button class="btn" id="openDiagnosticLogs">Открыть файл журнала</button></div>
+</div>
+<pre class="diagnostic-console" id="diagnosticLog">Загрузка журнала…</pre>
+<div class="diag-log-foot"><span id="diagnosticLogSize">—</span><span>Ошибки фиксируются всегда · журнал обновляется автоматически</span></div>
+</div><div class="panel diagnostics-card">
+<div class="diag-section-head"><div><h2>Проверки состояния</h2><p>Текущее состояние backend, Stream Dock, OAuth и локальной панели.</p></div><div class="diag-head-actions"><span class="pill" id="diagnosticChecksPill">—</span><button class="btn" id="refreshDiagnostics">Обновить</button></div></div>
+<div class="diagnostic-list" id="diagnosticChecks"></div>
+</div><div class="panel diagnostics-card">
+<div class="diag-section-head"><div><h2>Авто-тесты</h2><p>Проверки выполняются без включения, выключения или изменения устройств.</p></div><div class="diag-head-actions"><span class="pill" id="diagnosticTestsPill">Не запускались</span><button class="btn" id="runDiagnosticTests">Запустить</button></div></div>
+<div class="diagnostic-list" id="diagnosticTests"><div class="diag-placeholder">Откройте раздел или нажмите «Запустить».</div></div>
+</div></div>
+</section><section class="page" id="page-about">
+<div class="page-head"><div><h1>О плагине</h1><p>Неофициальный плагин Яндекс Умный дом для совместимых устройств Stream Dock на macOS.</p></div></div>
+<div class="panel about about-release"><img src="../static/icons/plugin.png"/><div><h2>Яндекс Умный дом [n-bord] · версия 1.0.0</h2><p><b>Автор:</b> nbord</p><p>Неофициальный любительский проект. Не связан с компанией Яндекс и сервисом «Умный дом» от Яндекса и не поддерживается ими.</p><p class="about-legal">Все упомянутые товарные знаки принадлежат их правообладателям.</p><div class="help-links about-project-links"><a class="btn primary" data-external-url="https://github.com/n-bord/yandex-smart-home-stream-dock" href="https://github.com/n-bord/yandex-smart-home-stream-dock">GitHub проекта</a></div></div></div>
+</section>
+</main>
+</div>
+<div aria-hidden="true" class="device-detail-drawer hidden" id="deviceDetailDrawer">
+<div class="device-detail-backdrop" data-close-device-detail=""></div>
+<aside aria-label="Устройство" aria-modal="true" class="device-detail-panel" id="deviceDetailPanel" role="dialog">
+<div class="device-detail-sticky">
+<div class="device-detail-head">
+<img alt="" class="device-detail-icon" id="deviceDetailIcon" src="../static/icons/device.png"/>
+<div class="device-detail-heading"><div class="device-detail-name" id="deviceDetailName">Устройство</div><div class="device-detail-sub" id="deviceDetailSub"></div><div class="device-detail-status" id="deviceDetailStatus">—</div></div>
+<div class="device-detail-head-actions">
+<button aria-label="Питание" class="device-detail-action device-detail-power hidden" id="deviceDetailPower" title="Питание" type="button"><span aria-hidden="true">⏻</span></button>
+<button aria-label="Избранное" class="favorite-toggle device-detail-favorite" id="deviceDetailFavorite" title="Избранное">★</button>
+<button aria-label="Закрыть" class="device-detail-action device-detail-close" id="deviceDetailClose" title="Закрыть" type="button">×</button>
+</div>
+</div>
+</div>
+<div class="device-detail-body" id="deviceDetailBody"></div>
+</aside>
+</div>
+<div aria-hidden="true" class="modal hidden" id="lightModal">
+<div class="modal-backdrop" data-close-light-modal=""></div>
+<div class="light-dialog">
+<button aria-label="Закрыть" class="modal-close" id="lightModalClose">×</button>
+<div class="dialog-title">Настройки освещения</div><div class="dialog-subtitle" id="lightModalName">Лампа</div>
+<div class="dialog-row-title"><span>Яркость</span><span id="lightBrightnessLabel">—</span></div>
+<div class="light-brightness-row"><span class="bulb-dot">◉</span><input id="lightBrightness" max="100" min="1" step="1" type="range"/><span id="lightBrightnessValue">—%</span></div>
+<div class="dialog-tabs"><button class="dialog-tab active" id="lightTabColor">◉ Цвет</button><button class="dialog-tab" id="lightTabTemp">♨ Температура</button></div>
+<div id="lightColorPane"><div class="dialog-row-title"><span>Выберите цвет</span><span id="lightSelectedHex"></span></div><div class="color-palette" id="lightPalette"></div><div class="custom-color-row"><label for="lightCustomColor">Свой цвет</label><input id="lightCustomColor" type="color" value="#ff9f18"/></div></div>
+<div class="hidden" id="lightTempPane"><div class="dialog-row-title"><span>Температура света</span><span id="lightTempValue">— K</span></div><div class="temp-scale"><span>Тёплый</span><input id="lightTemperature" max="9000" min="2000" step="100" type="range"/><span>Холодный</span></div><div class="temperature-preset-grid" id="lightTemperaturePresets"></div></div>
+<div class="quick-scene-row"><button data-light-quick="night">Ночь</button><button data-light-quick="work">Работа</button><button data-light-quick="warm">Тёплый</button><button data-light-quick="red">Красный</button></div>
+<div class="dialog-actions"><button class="btn outline-accent" id="lightApply">Применить</button><button class="btn accent" id="lightClose">Закрыть</button></div>
+</div>
+</div>
+<div aria-hidden="true" class="modal hidden" id="sensorHistoryModal">
+<div class="modal-backdrop" data-close-history-modal=""></div>
+<div class="history-dialog">
+<button aria-label="Закрыть" class="modal-close" id="sensorHistoryClose">×</button>
+<div class="dialog-title" id="sensorHistoryTitle">История датчика</div>
+<div class="dialog-subtitle" id="sensorHistoryName">Датчик</div>
+<div class="history-toolbar">
+<label class="history-control"><span>Показатель</span><select class="select" id="sensorHistoryMetric"></select></label>
+<div class="history-control period-control"><span>Период</span><div class="history-periods"><button class="active" data-history-hours="1">1 час</button><button data-history-hours="6">6 часов</button><button data-history-hours="24">24 часа</button></div></div>
+</div>
+<div class="history-chart-card"><div class="history-chart" id="sensorHistoryChart"></div><div class="history-empty hidden" id="sensorHistoryEmpty">История ещё накапливается.</div></div>
+<div class="history-stats" id="sensorHistoryStats"></div>
+<div class="history-note"><b>Локальная история.</b> Публичный API Яндекс Smart Home отдаёт текущее состояние датчика, но не временной ряд. Плагин сохраняет точки на Mac до 24 часов и показывает фактическое время каждой записи.</div>
+</div>
+</div>
+<div aria-live="polite" class="toast" id="toast" role="status"></div>
+<script>window.addEventListener('error',function(e){try{var x=document.getElementById('sideStatus');if(x){x.className='side-status error';var t=x.querySelector('span:last-child');if(t)t.textContent='Ошибка интерфейса';}var n=document.getElementById('connectionStatus');if(n){n.textContent='Ошибка JavaScript: '+String(e.message||'неизвестная ошибка');n.className='notice error';}}catch(_){}});</script>
+<script src="app.js?v=1.0.0"></script>
+</body>
+</html>

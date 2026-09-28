@@ -1,0 +1,40 @@
+*{box-sizing:border-box}:root{color-scheme:dark}body{margin:0;padding:12px;background:#1f1f1f;color:#eee;font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}.wrap{max-width:400px;margin:0 auto}.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}.brand{font-size:15px;font-weight:750}.subtitle{margin-top:3px;color:#999}.badge{white-space:nowrap;border-radius:999px;padding:5px 8px;background:#343434;color:#aaa;font-size:10px}.badge.ok{background:#153b23;color:#75e39a}.badge.error{background:#481f1f;color:#ff9a9a}.card{background:#282828;border:1px solid #343434;border-radius:10px;padding:12px;margin-bottom:10px}.section-title{font-weight:750;margin-bottom:10px;color:#f3f3f3}label{display:block;margin:9px 0 6px;color:#c4c4c4;font-weight:600}input,select,button{font:inherit;border-radius:7px;border:1px solid #4a4a4a}input,select{width:100%;padding:8px;background:#202020;color:#fff;outline:none}input:focus,select:focus{border-color:#777}.input-row{display:flex;gap:7px}.input-row input{flex:1;min-width:0}.input-row button{flex:none}button{padding:8px 10px;background:#373737;color:#fff;cursor:pointer}button:hover:not(:disabled){background:#444}button.primary{background:#4a4a4a;font-weight:650}button:disabled{opacity:.45;cursor:default}.buttons{display:flex;gap:7px;margin-top:12px}.buttons button{flex:1}.dashboard-btn{width:100%;padding:11px;margin-bottom:10px;background:#333;border-color:#4b4b4b;font-weight:700}.status{padding:9px;border-radius:7px;background:#292929;color:#b9b9b9;line-height:1.35}.status.ok{color:#7ee2a8}.status.error{color:#ff8585}.status.loading{color:#ffd66b}.meta{margin-top:9px;color:#a0a0a0;line-height:1.45}.hint{margin-top:7px;color:#888;line-height:1.45}.action-settings{margin-top:12px}.hidden{display:none!important}.check-row{display:flex;align-items:center;gap:8px;font-weight:500;margin-top:12px}.check-row input{width:auto;margin:0}.check-row span{color:#ddd}optgroup{color:#888}option{color:#fff}
+.subcard{margin-top:10px;padding:9px;background:#222;border:1px solid #383838;border-radius:8px}.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}select[multiple]{min-height:116px}select[multiple] option{padding:4px}.tiny-note{font-size:10px;color:#777}
+
+.sensor-style-card{margin-top:12px}.style-preview-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.style-preview{height:60px;border-radius:9px;background:#17191c;border:1px solid #3a3d42;position:relative;overflow:hidden}.style-preview.widget{display:flex;align-items:center;gap:8px;padding:9px;background:linear-gradient(120deg,#17352f,#17191c 58%)}.preview-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:1px solid #39d8a6;color:#39d8a6;font-size:9px;font-weight:800}.style-preview.widget b{display:inline-block;font-size:20px;line-height:1;color:#fff}.style-preview.widget small{margin-left:4px;color:#999;font-size:8px}.style-preview.minimal{padding:8px 10px}.style-preview.minimal small{display:block;color:#39d8a6;font-size:8px;font-style:normal}.style-preview.minimal b{display:inline-block;margin-top:4px;font-size:22px;color:#fff;line-height:1}.style-preview.minimal i{margin-left:4px;color:#999;font-size:8px;font-style:normal}
+
+/* n-bord release accent */
+:root{--nb-accent:#7c5cff;--nb-accent-2:#9b78ff;--nb-accent-soft:#2d244d}
+input:focus,select:focus{border-color:var(--nb-accent)!important;box-shadow:0 0 0 2px rgba(124,92,255,.16)}
+button.primary,.dashboard-btn,#refresh,#refreshState{background:linear-gradient(135deg,var(--nb-accent),var(--nb-accent-2));border-color:#8b6dff;color:#fff;box-shadow:0 6px 18px rgba(124,92,255,.20)}
+button.primary:hover:not(:disabled),.dashboard-btn:hover:not(:disabled),#refresh:hover:not(:disabled),#refreshState:hover:not(:disabled){background:linear-gradient(135deg,#8667ff,#aa86ff);border-color:#a58cff}
+button.primary:active:not(:disabled),.dashboard-btn:active:not(:disabled),#refresh:active:not(:disabled),#refreshState:active:not(:disabled){transform:translateY(1px);box-shadow:0 3px 10px rgba(124,92,255,.16)}
+select{accent-color:var(--nb-accent)}
+.check-row input{accent-color:var(--nb-accent)}
+
+/* v1.14.1 — text selection and standard macOS editing shortcuts */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),textarea{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default}
+
+
+/* v1.15.0 — unified smart-home accent for action settings */
+select,
+.action-settings select,
+.action-settings input[type="number"],
+.action-settings input[type="text"] {
+  border-color: #58468f;
+  background: linear-gradient(180deg, #29223f, #211c34);
+}
+select:hover:not(:disabled),
+.action-settings input:hover:not(:disabled) {
+  border-color: #735bc2;
+}
+select:focus,
+.action-settings input:focus {
+  border-color: var(--nb-accent) !important;
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, .18), 0 5px 15px rgba(24, 15, 55, .16);
+}
+select:disabled,
+.action-settings input:disabled {
+  border-color: #413957;
+  background: #24212d;
+}
