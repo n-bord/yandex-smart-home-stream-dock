@@ -32,7 +32,7 @@
     <img src="https://img.shields.io/badge/СКАЧАТЬ%20WINDOWS-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Скачать для Windows">
   </a>
   <a href="https://boosty.to/nbord">
-    <img src="https://img.shields.io/badge/ПОДДЕРЖАТЬ%20НА%20BOOSTY-F15F2C?style=for-the-badge" alt="Поддержать на Boosty">
+    <img src="https://img.shields.io/badge/ПОДДЕРЖАТЬ%20НА%20BOOSTY-F15F2C?style=for-the-badge&logo=boosty&logoColor=white" alt="Поддержать на Boosty">
   </a>
 </p>
 
@@ -329,6 +329,14 @@ iot:control
 
 ---
 
+# О плагине и проверка обновлений
+
+![О плагине и проверка обновлений](./screenshots/about-plugin.png)
+
+Во вкладке **«О плагине»** отображаются установленная версия, последний опубликованный GitHub Release, описание релиза и ссылки на проект и список релизов.
+
+---
+
 # Что нового в 1.1.0
 
 - добавлена полноценная сборка для **Windows 10/11**;
@@ -366,7 +374,13 @@ iot:control
 - **Stream Dock 3.10.203.0730**
 - **miraBox N4**
 
-Windows-сборка перед релизом проверена на установку, авторизацию через Яндекс, работу панели, кнопок, крутилок, внешних ссылок и сохранение настроек.
+Windows:
+
+- **Windows 11**
+- **Stream Dock 3.10.203.0730**
+- **miraBox N4**
+
+На Windows дополнительно проверены установка через `INSTALL-WINDOWS.bat`, авторизация через Яндекс, работа панели, кнопок и крутилок, изменение яркости, внешние ссылки GitHub / Releases и сохранение настроек после перезапуска Stream Dock.
 
 ---
 
@@ -442,11 +456,19 @@ Windows-сборка перед релизом проверена на уста�
 
 <p>
   <a href="https://boosty.to/nbord">
-    <img src="https://img.shields.io/badge/Поддержать%20проект-на%20Boosty-F15F2C?style=for-the-badge" alt="Boosty">
+    <img src="https://img.shields.io/badge/Поддержать%20проект-на%20Boosty-F15F2C?style=for-the-badge&logo=boosty&logoColor=white" alt="Boosty">
   </a>
 </p>
 
 Поддержка не влияет на доступ к функциям плагина — проект остаётся публичным и доступным через GitHub.
+
+---
+
+# Лицензия
+
+Исходный код проекта распространяется по лицензии [MIT](./LICENSE).
+
+Лицензия распространяется только на код данного проекта и не предоставляет прав на товарные знаки, логотипы или материалы Яндекса, Stream Dock и других правообладателей.
 
 ---
 
