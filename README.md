@@ -2,6 +2,37 @@
 
 ![Яндекс Умный дом на Stream Dock](./screenshots/cover.png)
 
+<p align="center">
+  <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">
+    <img src="https://img.shields.io/github/v/release/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=release&color=7C5CFF" alt="GitHub Release">
+  </a>
+  <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">
+    <img src="https://img.shields.io/github/downloads/n-bord/yandex-smart-home-stream-dock/total?style=flat-square&label=downloads&color=34C759" alt="Downloads">
+  </a>
+  <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/stargazers">
+    <img src="https://img.shields.io/github/stars/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=stars&color=F5C542" alt="GitHub Stars">
+  </a>
+  <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/issues">
+    <img src="https://img.shields.io/github/issues/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=issues&color=5DADE2" alt="GitHub Issues">
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS-111827?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Windows-planned-6B7280?style=flat-square&logo=windows11&logoColor=white" alt="Windows planned">
+  <img src="https://img.shields.io/badge/Stream%20Dock-compatible-7C5CFF?style=flat-square" alt="Stream Dock Compatible">
+  <img src="https://img.shields.io/badge/Yandex%20Smart%20Home-unofficial-FFCC00?style=flat-square&labelColor=111827" alt="Unofficial Yandex Smart Home plugin">
+</p>
+
+<p align="center">
+  <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases/latest">
+    <img src="https://img.shields.io/badge/СКАЧАТЬ%20ДЛЯ%20macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Скачать для macOS">
+  </a>
+  <a href="https://boosty.to/nbord">
+    <img src="https://img.shields.io/badge/ПОДДЕРЖАТЬ%20НА%20BOOSTY-F15F2C?style=for-the-badge" alt="Поддержать на Boosty">
+  </a>
+</p>
+
 Неофициальный плагин для управления **Яндекс Умным домом** с устройств **Stream Dock** на **macOS**.
 
 Основная идея проекта — вынести повседневное управление домом на физические кнопки, крутилки и информационные экраны Stream Dock, а для более подробного управления использовать встроенную локальную панель.
@@ -326,6 +357,20 @@ https://oauth.yandex.ru/authorize?response_type=token&client_id=ВАШ_CLIENT_ID
 - шаги воспроизведения;
 - скриншот;
 - диагностическую информацию **без OAuth-токена**.
+
+---
+
+# Поддержать проект
+
+Если плагин оказался полезен и вы хотите поддержать дальнейшую разработку:
+
+<p>
+  <a href="https://boosty.to/nbord">
+    <img src="https://img.shields.io/badge/Поддержать%20проект-на%20Boosty-F15F2C?style=for-the-badge" alt="Boosty">
+  </a>
+</p>
+
+Поддержка не влияет на доступ к функциям плагина — проект остаётся публичным и доступным через GitHub.
 
 ---
 
