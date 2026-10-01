@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="238" height="38" viewBox="0 0 238 38" role="img" aria-label="Скачать Windows">
+  <rect width="238" height="38" rx="3" fill="#0078D4"/>
+  <g fill="#fff" transform="translate(13 10)">
+    <path d="M0 1.6 7.5.55v7.2H0V1.6Z"/>
+    <path d="M8.6.4 18 0v7.75H8.6V.4Z"/>
+    <path d="M0 8.85h7.5v7.2L0 15V8.85Z"/>
+    <path d="M8.6 8.85H18V16.6l-9.4-.4V8.85Z"/>
+  </g>
+  <text x="40" y="24.5" fill="#fff" font-family="Verdana,DejaVu Sans,sans-serif" font-size="12" font-weight="700" letter-spacing="1">СКАЧАТЬ WINDOWS</text>
+</svg>
