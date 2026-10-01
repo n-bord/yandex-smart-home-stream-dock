@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple&logoColor=white" alt="macOS supported">
-  <img src="https://img.shields.io/badge/Windows-supported-0078D4?style=flat-square&logo=windows11&logoColor=white" alt="Windows supported">
+  <img src="./assets/badge-windows-supported.svg" alt="Windows supported">
   <img src="https://img.shields.io/badge/Stream%20Dock-compatible-7C5CFF?style=flat-square" alt="Stream Dock compatible">
   <img src="https://img.shields.io/badge/Yandex%20Smart%20Home-unofficial-FFCC00?style=flat-square&labelColor=111827" alt="Unofficial Yandex Smart Home plugin">
 </p>
@@ -29,7 +29,7 @@
     <img src="https://img.shields.io/badge/СКАЧАТЬ%20macOS-111111?style=for-the-badge&logo=apple&logoColor=white" alt="Скачать для macOS">
   </a>
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases/latest">
-    <img src="https://img.shields.io/badge/СКАЧАТЬ%20WINDOWS-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Скачать для Windows">
+    <img src="./assets/badge-download-windows.svg" alt="Скачать для Windows">
   </a>
   <a href="https://boosty.to/nbord">
     <img src="https://img.shields.io/badge/ПОДДЕРЖАТЬ%20НА%20BOOSTY-F15F2C?style=for-the-badge&logo=boosty&logoColor=white" alt="Поддержать на Boosty">
