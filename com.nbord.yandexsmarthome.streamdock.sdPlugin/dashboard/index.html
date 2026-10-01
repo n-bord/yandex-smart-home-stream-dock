@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 
 <html lang="ru">
-<head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="light dark" name="color-scheme"/><title>Яндекс Умный дом [n-bord] — Панель</title><link href="style.css?v=1.0.0" rel="stylesheet"/></head>
+<head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="light dark" name="color-scheme"/><title>Яндекс Умный дом [n-bord] — Панель</title><link href="style.css?v=1.1.0" rel="stylesheet"/></head>
 <body>
 <div class="app">
 <aside class="sidebar">
@@ -40,7 +40,7 @@
 
 </div>
 
-<div class="side-bottom"><div class="side-status" id="sideStatus"><span class="dot"></span><span>Подключение…</span></div><div class="version" id="sideVersion">v1.0.0</div></div>
+<div class="side-bottom"><div class="side-status" id="sideStatus"><span class="dot"></span><span>Подключение…</span></div><div class="version" id="sideVersion">v1.1.0</div></div>
 </aside>
 <main class="main">
 <section class="page active" id="page-devices">
@@ -64,7 +64,7 @@
 <div class="page-head"><div><h1>Статистика</h1><p>Локальная статистика использования кнопок, крутилок и сценариев.</p></div><div class="head-actions"><label class="usage-toggle" for="usageEnabled"><input checked="" id="usageEnabled" type="checkbox"/><span class="switch-track"><span class="switch-knob"></span></span><span>Собирать статистику</span></label><button class="btn" id="refreshUsage">Обновить</button><button class="btn danger-btn" id="clearUsage">Очистить</button></div></div>
 <div class="usage-summary-grid"><div class="summary-card"><span>Сегодня</span><strong id="usageToday">0</strong></div><div class="summary-card"><span>За 7 дней</span><strong id="usageWeek">0</strong></div><div class="summary-card"><span>Всего</span><strong id="usageTotal">0</strong></div><div class="summary-card"><span>Действий</span><strong id="usageUnique">0</strong></div></div>
 <div class="panel usage-panel"><div class="diag-section-head"><div><h2>Чаще всего используется</h2><p>Вращение крутилки считается одним использованием за жест, а не каждым щелчком.</p></div><span class="pill">7 дней</span></div><div class="empty hidden" id="usageEmpty">Статистика пока пустая. Используйте кнопки или сценарии на Stream Dock.</div><div class="usage-list" id="usageList"></div></div>
-<div class="notice usage-note" id="usageStateNote">Статистика хранится только локально на Mac. Для часто используемых устройств и сценариев можно сразу добавить ★ в «Избранное».</div>
+<div class="notice usage-note" id="usageStateNote">Статистика хранится только локально на этом компьютере. Для часто используемых устройств и сценариев можно сразу добавить ★ в «Избранное».</div>
 </section>
 
 
@@ -89,7 +89,21 @@
   <button class="btn danger-btn reset-plugin-btn" id="fullResetPlugin" type="button">Сбросить плагин…</button>
 </section>
 </div>
-<div class="settings-pane" data-settings-pane="connection"><div class="settings-section-head"><div><h2>Подключение</h2><p>Один OAuth-токен используется всеми действиями плагина.</p></div><span class="pill" id="connectionPill">Не проверено</span></div><div class="panel"><h2>Аккаунт Яндекса</h2><label for="dashboardToken">OAuth-токен</label><div class="input-row"><input autocomplete="off" id="dashboardToken" placeholder="OAuth-токен Яндекс" spellcheck="false" type="password"/><button class="btn primary" id="saveToken">Сохранить и проверить</button><button class="btn danger-btn" id="logoutToken">Выйти</button></div><p class="hint">Требуются доступы <b>iot:view</b> и <b>iot:control</b>. Токен хранится в глобальных настройках плагина. Можно вставить сам токен или полный URL результата OAuth — в этом случае плагин также сохранит срок действия из <code>expires_in</code>.</p><div id="tokenExpiryInfo" class="token-expiry-info hidden"></div><div class="notice" id="connectionStatus">Ожидание данных…</div></div><div class="panel token-help"><h2>Как получить токен</h2><ol><li>Откройте Яндекс OAuth и создайте приложение типа <b>«Для доступа к API или отладки»</b>.</li><li>Добавьте разрешения умного дома <code>iot:view</code> и <code>iot:control</code>.</li><li>Для приложения доступа к API используйте redirect URI <code>https://oauth.yandex.ru/verification_code</code>.</li><li>Получите OAuth-токен и вставьте его выше. После проверки он станет общим для всех кнопок и крутилок.</li></ol><div class="help-links"><a class="btn" data-external-url="https://oauth.yandex.ru/client/new/" href="https://oauth.yandex.ru/client/new/">Создать OAuth-приложение</a><a class="btn" data-external-url="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol" href="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol">Документация API</a></div></div></div>
+<div class="settings-pane" data-settings-pane="connection">
+<div class="settings-section-head"><div><h2>Подключение</h2><p>Войдите через Яндекс в браузере или подключите собственный OAuth-токен вручную.</p></div><span class="pill" id="connectionPill">Не проверено</span></div>
+<div class="panel oauth-login-panel">
+  <div class="oauth-login-copy">
+    <div class="oauth-login-title"><span class="oauth-yandex-mark">Я</span><div><h2>Войти через Яндекс</h2><p>Рекомендуемый способ</p></div><span class="oauth-recommended">Без ручной настройки</span></div>
+    <p class="oauth-login-description">Плагин откроет Яндекс OAuth в браузере. После подтверждения доступа токен автоматически вернётся в плагин и будет сохранён для всех кнопок и крутилок.</p>
+    <div class="oauth-permissions"><span>✓ Просмотр умного дома</span><span>✓ Управление устройствами</span><span>✓ Срок действия токена</span></div>
+  </div>
+  <button class="btn primary oauth-login-btn" id="yandexOAuthLogin" type="button">Войти через Яндекс</button>
+  <div class="oauth-flow-status hidden" id="oauthFlowStatus"><span class="oauth-flow-spinner"></span><div class="oauth-flow-copy"><strong id="oauthFlowTitle">Ожидаю подтверждения…</strong><small id="oauthFlowDetail">Завершите вход в открывшемся окне браузера.</small><button class="btn oauth-open-browser hidden" id="oauthOpenBrowser" type="button">Открыть страницу авторизации</button></div></div>
+</div>
+<div class="connection-divider"><span>или</span></div>
+<div class="panel manual-token-panel"><h2>Подключить токен вручную</h2><p class="hint manual-token-intro">Для продвинутого варианта можно использовать собственное OAuth-приложение Яндекса и вставить полученный токен вручную.</p><label for="dashboardToken">OAuth-токен</label><div class="input-row"><input autocomplete="off" id="dashboardToken" placeholder="OAuth-токен Яндекс" spellcheck="false" type="password"/><button class="btn primary" id="saveToken">Сохранить и проверить</button><button class="btn danger-btn" id="logoutToken">Выйти</button></div><p class="hint">Требуются доступы <b>iot:view</b> и <b>iot:control</b>. Можно вставить сам токен или полный URL результата OAuth — при наличии <code>expires_in</code> плагин сохранит и срок действия.</p><div id="tokenExpiryInfo" class="token-expiry-info hidden"></div><div class="notice" id="connectionStatus">Ожидание данных…</div></div>
+<div class="panel token-help"><h2>Ручное получение токена</h2><ol><li>Откройте Яндекс OAuth и создайте приложение типа <b>«Для доступа к API или отладки»</b>.</li><li>Добавьте разрешения <code>iot:view</code> и <code>iot:control</code>.</li><li>Используйте redirect URI <code>https://oauth.yandex.ru/verification_code</code>.</li><li>Получите токен и вставьте его в поле выше.</li></ol><div class="help-links"><a class="btn" data-external-url="https://oauth.yandex.ru/client/new/" href="https://oauth.yandex.ru/client/new/">Создать своё OAuth-приложение</a><a class="btn" data-external-url="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol" href="https://yandex.ru/dev/dialogs/smart-home/doc/ru/concepts/platform-protocol">Документация API</a></div></div>
+</div>
 <div class="settings-pane" data-settings-pane="diagnostics"><div class="settings-section-head"><div><h2>Диагностика</h2><p>Живой журнал, проверки состояния и безопасные авто-тесты.</p></div></div><div class="panel diagnostics-log-panel">
 <div class="diag-toolbar">
 <label class="debug-toggle" for="debugMode"><input id="debugMode" type="checkbox"/><span class="switch-track"><span class="switch-knob"></span></span><span>Режим отладки</span></label>
@@ -105,8 +119,25 @@
 <div class="diagnostic-list" id="diagnosticTests"><div class="diag-placeholder">Откройте раздел или нажмите «Запустить».</div></div>
 </div></div>
 </section><section class="page" id="page-about">
-<div class="page-head"><div><h1>О плагине</h1><p>Неофициальный плагин Яндекс Умный дом для совместимых устройств Stream Dock на macOS.</p></div></div>
-<div class="panel about about-release"><img src="../static/icons/plugin.png"/><div><h2>Яндекс Умный дом [n-bord] · версия 1.0.0</h2><p><b>Автор:</b> nbord</p><p>Неофициальный любительский проект. Не связан с компанией Яндекс и сервисом «Умный дом» от Яндекса и не поддерживается ими.</p><p class="about-legal">Все упомянутые товарные знаки принадлежат их правообладателям.</p><div class="help-links about-project-links"><a class="btn primary" data-external-url="https://github.com/n-bord/yandex-smart-home-stream-dock" href="https://github.com/n-bord/yandex-smart-home-stream-dock">GitHub проекта</a></div></div></div>
+<div class="page-head"><div><h1>О плагине</h1><p>Неофициальный плагин Яндекс Умный дом для совместимых устройств Stream Dock на macOS и Windows.</p></div></div>
+<div class="panel about about-release"><img src="../static/icons/plugin.png"/><div><h2>Яндекс Умный дом [n-bord] · версия 1.1.0</h2><p><b>Автор:</b> nbord</p><p>Неофициальный любительский проект. Не связан с компанией Яндекс и сервисом «Умный дом» от Яндекса и не поддерживается ими.</p><p class="about-legal">Все упомянутые товарные знаки принадлежат их правообладателям.</p><div class="help-links about-project-links"><a class="btn primary" data-external-url="https://github.com/n-bord/yandex-smart-home-stream-dock" href="https://github.com/n-bord/yandex-smart-home-stream-dock">GitHub проекта</a><a class="btn" data-external-url="https://github.com/n-bord/yandex-smart-home-stream-dock/releases" href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">Все релизы</a></div></div></div>
+<div class="panel update-panel">
+  <div class="update-head">
+    <div class="update-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.2 9A7 7 0 0 1 18.5 6.5L20 8"/><path d="M17.8 15A7 7 0 0 1 5.5 17.5L4 16"/></svg></div>
+    <div class="update-title"><h2>Обновление</h2><p id="updateSummary">Информация о последнем релизе будет загружена с GitHub.</p></div>
+    <span class="pill update-status" id="updateStatusPill">Не проверено</span>
+  </div>
+  <div class="update-version-grid">
+    <div class="update-version-box"><span>Установлена</span><strong id="updateCurrentVersion">v1.1.0</strong></div>
+    <div class="update-version-box"><span>Последняя на GitHub</span><strong id="updateLatestVersion">—</strong></div>
+  </div>
+  <div class="update-release-card hidden" id="updateReleaseCard">
+    <div class="update-release-head"><div><strong id="updateReleaseName">Последний релиз</strong><small id="updateReleaseMeta"></small></div><span class="update-release-asset hidden" id="updateReleaseAsset"></span></div>
+    <div class="update-release-notes" id="updateReleaseNotes"></div>
+  </div>
+  <div class="help-links update-actions"><button class="btn" id="checkUpdates" type="button">Проверить обновление</button><a class="btn" data-external-url="https://github.com/n-bord/yandex-smart-home-stream-dock/releases" href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">Открыть Releases</a></div>
+  <p class="update-footnote">Проверка выполняется через GitHub Releases. Если доступна новая версия, кнопка проверки превратится в переход к странице соответствующего релиза.</p>
+</div>
 </section>
 </main>
 </div>
@@ -153,11 +184,11 @@
 </div>
 <div class="history-chart-card"><div class="history-chart" id="sensorHistoryChart"></div><div class="history-empty hidden" id="sensorHistoryEmpty">История ещё накапливается.</div></div>
 <div class="history-stats" id="sensorHistoryStats"></div>
-<div class="history-note"><b>Локальная история.</b> Публичный API Яндекс Smart Home отдаёт текущее состояние датчика, но не временной ряд. Плагин сохраняет точки на Mac до 24 часов и показывает фактическое время каждой записи.</div>
+<div class="history-note"><b>Локальная история.</b> Публичный API Яндекс Smart Home отдаёт текущее состояние датчика, но не временной ряд. Плагин сохраняет точки локально на этом компьютере до 24 часов и показывает фактическое время каждой записи.</div>
 </div>
 </div>
 <div aria-live="polite" class="toast" id="toast" role="status"></div>
 <script>window.addEventListener('error',function(e){try{var x=document.getElementById('sideStatus');if(x){x.className='side-status error';var t=x.querySelector('span:last-child');if(t)t.textContent='Ошибка интерфейса';}var n=document.getElementById('connectionStatus');if(n){n.textContent='Ошибка JavaScript: '+String(e.message||'неизвестная ошибка');n.className='notice error';}}catch(_){}});</script>
-<script src="app.js?v=1.0.0"></script>
+<script src="app.js?v=1.1.0"></script>
 </body>
 </html>

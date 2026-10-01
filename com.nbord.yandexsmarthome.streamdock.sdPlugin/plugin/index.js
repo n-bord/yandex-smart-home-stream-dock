@@ -5,13 +5,23 @@ const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 
+const IS_WINDOWS = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+const SYSTEM_LABEL = IS_WINDOWS ? 'Windows' : (IS_MAC ? 'macOS' : process.platform);
 const LOG_FILE = path.join(__dirname, 'backend.log');
-const LEGACY_PLUGIN_DATA_DIR = process.env.HOME ? path.join(process.env.HOME, 'Library', 'Application Support', 'Yandex Smart Home Stream Dock') : __dirname;
-const PLUGIN_DATA_DIR = process.env.HOME ? path.join(process.env.HOME, 'Library', 'Application Support', 'n-bord Yandex Smart Home Stream Dock') : __dirname;
+const USER_HOME = os.homedir() || process.env.HOME || __dirname;
+const WINDOWS_APPDATA = process.env.APPDATA || path.join(USER_HOME, 'AppData', 'Roaming');
+const LEGACY_PLUGIN_DATA_DIR = IS_WINDOWS
+  ? path.join(WINDOWS_APPDATA, 'Yandex Smart Home Stream Dock')
+  : path.join(USER_HOME, 'Library', 'Application Support', 'Yandex Smart Home Stream Dock');
+const PLUGIN_DATA_DIR = IS_WINDOWS
+  ? path.join(WINDOWS_APPDATA, 'n-bord', 'Yandex Smart Home Stream Dock')
+  : path.join(USER_HOME, 'Library', 'Application Support', 'n-bord Yandex Smart Home Stream Dock');
 function migrateLegacyPluginDataDir() {
-  if (!process.env.HOME || PLUGIN_DATA_DIR === LEGACY_PLUGIN_DATA_DIR) return;
+  if (!USER_HOME || PLUGIN_DATA_DIR === LEGACY_PLUGIN_DATA_DIR) return;
   try {
     if (!fs.existsSync(PLUGIN_DATA_DIR) && fs.existsSync(LEGACY_PLUGIN_DATA_DIR)) {
       fs.renameSync(LEGACY_PLUGIN_DATA_DIR, PLUGIN_DATA_DIR);
@@ -39,10 +49,19 @@ let usageStatsSaveTimer = null;
 let usageStatsMtime = 0;
 const usageStatsThrottle = new Map();
 let debugLoggingEnabled = false;
+function redactSensitiveLogText(value) {
+  let text = String(value ?? '');
+  text = text.replace(/(Authorization\s*:\s*Bearer\s+)[^\s,;]+/gi, '$1[REDACTED]');
+  text = text.replace(/((?:access_token|refresh_token|code_verifier|client_secret)=)[^&\s]+/gi, '$1[REDACTED]');
+  text = text.replace(/([?&#]code=)[^&\s]+/gi, '$1[REDACTED]');
+  text = text.replace(/((?:\"|')?(?:token|accessToken|refreshToken|codeVerifier)(?:\"|')?\s*[:=]\s*(?:\"|')?)[^\"',\s}]+/gi, '$1[REDACTED]');
+  text = text.replace(/\by0_[A-Za-z0-9._~-]{12,}\b/g, '[REDACTED_TOKEN]');
+  return text;
+}
 function logPart(value) {
-  if (value instanceof Error) return value.stack || value.message || String(value);
-  if (typeof value === 'string') return value;
-  try { return JSON.stringify(value); } catch (_) { return String(value); }
+  if (value instanceof Error) return redactSensitiveLogText(value.stack || value.message || String(value));
+  if (typeof value === 'string') return redactSensitiveLogText(value);
+  try { return redactSensitiveLogText(JSON.stringify(value)); } catch (_) { return redactSensitiveLogText(String(value)); }
 }
 function appendLogLine(parts) {
   try {
@@ -99,6 +118,14 @@ const ACTIONS = new Set([
   ACTION_LIGHT_COLOR, ACTION_LIGHT_PRESET, ACTION_MEDIA_VOLUME, ACTION_MEDIA_CHANNEL, ACTION_DASHBOARD, ACTION_MEDIA, ACTION_SCENARIO
 ]);
 const YANDEX_API = 'https://api.iot.yandex.net/v1.0';
+const YANDEX_OAUTH_CLIENT_ID = '52021912378f445c85012302a85398e9';
+const YANDEX_OAUTH_AUTHORIZE_URL = 'https://oauth.yandex.ru/authorize';
+const YANDEX_OAUTH_TOKEN_URL = 'https://oauth.yandex.ru/token';
+const YANDEX_OAUTH_CALLBACK_HOST = '127.0.0.1';
+const YANDEX_OAUTH_CALLBACK_PORT = 49407;
+const YANDEX_OAUTH_CALLBACK_PATH = '/oauth/yandex/callback';
+const YANDEX_OAUTH_REDIRECT_URI = `http://${YANDEX_OAUTH_CALLBACK_HOST}:${YANDEX_OAUTH_CALLBACK_PORT}${YANDEX_OAUTH_CALLBACK_PATH}`;
+const YANDEX_OAUTH_SESSION_TTL_MS = 10 * 60 * 1000;
 const CAP_ONOFF = 'devices.capabilities.on_off';
 const CAP_RANGE = 'devices.capabilities.range';
 const CAP_MODE = 'devices.capabilities.mode';
@@ -264,18 +291,115 @@ const informationContexts = new Set();
 const scenarioDialContexts = new Set();
 const scenarioDialRuntime = new Map();
 const targetPresence = new Map();
+const presenceProbeQueue = [];
+const presenceProbeInFlight = new Map();
+let presenceProbeActive = 0;
 
 const DEFAULT_ACTION_REFRESH_SECONDS = 30;
 const ACTION_REFRESH_SECONDS = new Set([0, 15, 30, 45, 60, 120, 300]);
-const ACTION_REFRESH_STAGGER_MS = 120;
+const YANDEX_REQUEST_TIMEOUT_MS = 18000;
+const YANDEX_GET_RETRIES = 1;
+const YANDEX_RETRY_DELAY_MS = 650;
+const PRESENCE_PROBE_TIMEOUT_MS = 7000;
+const PRESENCE_PROBE_TTL_MS = 55000;
+const PRESENCE_PROBE_CONCURRENCY = 3;
 
 let actionRefreshTimer = null;
-let globalSettings = { token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS };
+let actionRefreshRunning = false;
+let globalSettings = { token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, oauthRefreshToken: '', oauthDeviceId: '', oauthAuthMethod: '', actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS };
 let globalSettingsReady = false;
 let userInfoCache = { token: '', at: 0, data: null };
 let userInfoInFlight = { token: '', promise: null };
 let dashboardDataCache = { token: '', at: 0, data: null };
 let dashboardPresenceCache = { token: '', at: 0, devices: [], groups: [] };
+
+let windowsYandexPowerShellPreferred = false;
+
+function windowsPowerShellJsonRequest(url, token, method='GET', body='', timeoutMs=YANDEX_REQUEST_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    if (!IS_WINDOWS) return reject(new Error('Windows fallback недоступен на этой платформе.'));
+    const script = [
+      "$ErrorActionPreference='Stop'",
+      "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)",
+      "$headers=@{ Authorization = ('Bearer ' + $env:YSH_TOKEN) }",
+      "$params=@{ Uri=$env:YSH_URL; Method=$env:YSH_METHOD; Headers=$headers; UseBasicParsing=$true; TimeoutSec=[Math]::Max(2,[int]$env:YSH_TIMEOUT_SEC) }",
+      "if($env:YSH_BODY_B64){ $raw=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:YSH_BODY_B64)); $params['Body']=$raw; $params['ContentType']='application/json' }",
+      "try {",
+      "  $r=Invoke-WebRequest @params",
+      "  @{ ok=$true; status=[int]$r.StatusCode; body=[string]$r.Content } | ConvertTo-Json -Compress",
+      "} catch {",
+      "  $status=0; $content='';",
+      "  try {",
+      "    if($_.Exception.Response){",
+      "      $status=[int]$_.Exception.Response.StatusCode;",
+      "      $stream=$_.Exception.Response.GetResponseStream();",
+      "      if($stream){ $reader=New-Object IO.StreamReader($stream); $content=$reader.ReadToEnd(); $reader.Close() }",
+      "    }",
+      "  } catch {}",
+      "  @{ ok=$false; status=$status; body=$content; error=$_.Exception.Message } | ConvertTo-Json -Compress",
+      "}"
+    ].join('\n');
+    const env = {
+      ...process.env,
+      YSH_URL: String(url || ''),
+      YSH_TOKEN: String(token || ''),
+      YSH_METHOD: String(method || 'GET').toUpperCase(),
+      YSH_TIMEOUT_SEC: String(Math.max(2, Math.ceil((Number(timeoutMs) || YANDEX_REQUEST_TIMEOUT_MS) / 1000))),
+      YSH_BODY_B64: body ? Buffer.from(String(body), 'utf8').toString('base64') : ''
+    };
+    let stdout='', stderr='', settled=false;
+    let child;
+    try {
+      child = spawn('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', script], {
+        windowsHide: true,
+        stdio: ['ignore','pipe','pipe'],
+        env
+      });
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    const timer=setTimeout(()=>{
+      if(settled)return;
+      settled=true;
+      try{child.kill();}catch(_){}
+      const err=new Error(`Windows HTTP fallback не ответил за ${Math.max(2,Math.ceil((Number(timeoutMs)||YANDEX_REQUEST_TIMEOUT_MS)/1000))} секунд.`);
+      err.code='YANDEX_TIMEOUT';
+      reject(err);
+    }, Math.max(4000, (Number(timeoutMs)||YANDEX_REQUEST_TIMEOUT_MS)+3500));
+    child.stdout?.on('data', x=>{stdout += x.toString('utf8');});
+    child.stderr?.on('data', x=>{stderr += x.toString('utf8');});
+    child.on('error', e=>{
+      if(settled)return;
+      settled=true; clearTimeout(timer); reject(e);
+    });
+    child.on('close', ()=>{
+      if(settled)return;
+      settled=true; clearTimeout(timer);
+      const raw=String(stdout||'').trim();
+      let result=null;
+      try { result = JSON.parse(raw.split(/\r?\n/).filter(Boolean).pop() || '{}'); }
+      catch (_) {
+        const err=new Error(`Windows HTTP fallback вернул некорректный ответ${stderr?': '+stderr.trim():'.'}`);
+        err.code='YANDEX_NETWORK_ERROR';
+        reject(err); return;
+      }
+      const status=Number(result.status)||0;
+      const content=String(result.body||'');
+      let json=null;
+      try{json=content?JSON.parse(content):null;}catch(_){}
+      if(result.ok && status>=200 && status<300){resolve(json);return;}
+      if(status===401 || status===403){
+        const err=new Error('Требуется повторная авторизация через Яндекс. Токен недействителен или больше не имеет нужного доступа.');
+        err.code='YANDEX_AUTH_ERROR'; err.httpStatus=status; reject(err); return;
+      }
+      const err=new Error(json?.message || result.error || (status?`HTTP ${status}`:'Не удалось выполнить запрос через Windows networking.'));
+      if(status)err.httpStatus=status;
+      err.code=status?'YANDEX_HTTP_ERROR':'YANDEX_NETWORK_ERROR';
+      reject(err);
+    });
+  });
+}
 
 function targetStatusKey(targetType, id) { return `${targetType === 'group' ? 'group' : 'device'}:${String(id || '')}`; }
 function noteTargetPresence(targetType, id, online) {
@@ -288,6 +412,49 @@ function ageShort(ms){const sec=Math.max(0,Math.floor(ms/1000));if(sec<60)return
 function offlineStatusText(targetType,id){const st=targetPresence.get(targetStatusKey(targetType,id));if(!st)return 'НЕ В СЕТИ';if(st.lastOnline)return `OFFLINE · ${ageShort(Date.now()-st.lastOnline)}`;if(st.offlineSince)return `OFFLINE · ${ageShort(Date.now()-st.offlineSince)}`;return 'НЕ В СЕТИ';}
 function decoratePresence(entity){const st=targetPresence.get(targetStatusKey(entity.entityType,entity.id)),fresh=st&&Number(st.checkedAt)>0&&Date.now()-Number(st.checkedAt)<90000,resolved=fresh&&typeof st.online==='boolean'?st.online:entity.online;return {...entity,online:resolved,lastOnlineAt:st?.lastOnline||null,offlineSince:st?.offlineSince||null,offlineText:resolved===false?offlineStatusText(entity.entityType,entity.id):''};}
 
+function cachedTargetPresence(targetType,id,maxAge=PRESENCE_PROBE_TTL_MS){
+  const st=targetPresence.get(targetStatusKey(targetType,id));
+  if(!st||typeof st.online!=='boolean'||!Number(st.checkedAt))return null;
+  return Date.now()-Number(st.checkedAt)<=Math.max(1000,Number(maxAge)||PRESENCE_PROBE_TTL_MS)?st.online:null;
+}
+function pumpPresenceProbeQueue(){
+  while(presenceProbeActive<PRESENCE_PROBE_CONCURRENCY&&presenceProbeQueue.length){
+    const task=presenceProbeQueue.shift();
+    presenceProbeActive+=1;
+    Promise.resolve().then(task.run).then(task.resolve,task.reject).finally(()=>{
+      presenceProbeActive=Math.max(0,presenceProbeActive-1);
+      presenceProbeInFlight.delete(task.key);
+      pumpPresenceProbeQueue();
+    });
+  }
+}
+function probeTargetPresence(token,targetType,id,force=false){
+  const normalizedType=targetType==='group'?'group':'device';
+  const targetId=String(id||'');
+  if(!targetId)return Promise.resolve(null);
+  if(!force){const cached=cachedTargetPresence(normalizedType,targetId);if(typeof cached==='boolean')return Promise.resolve(cached);}
+  const key=`${String(token||'').slice(-12)}:${targetStatusKey(normalizedType,targetId)}`;
+  if(presenceProbeInFlight.has(key))return presenceProbeInFlight.get(key);
+  let resolveTask,rejectTask;
+  const promise=new Promise((resolve,reject)=>{resolveTask=resolve;rejectTask=reject;});
+  presenceProbeInFlight.set(key,promise);
+  presenceProbeQueue.push({key,resolve:resolveTask,reject:rejectTask,run:async()=>{
+    const apiPath=normalizedType==='group'?`/groups/${encodeURIComponent(targetId)}`:`/devices/${encodeURIComponent(targetId)}`;
+    try{
+      const data=await yandexRequest(token,apiPath,{noRetry:true,timeoutMs:PRESENCE_PROBE_TIMEOUT_MS});
+      const online=data?.state==='offline'?false:(data?.state==='online'?true:null);
+      if(typeof online==='boolean')noteTargetPresence(normalizedType,targetId,online);
+      return online;
+    }catch(e){
+      debugLine('PRESENCE_PROBE_WARN',normalizedType,targetId,e?.message||String(e));
+      const cached=cachedTargetPresence(normalizedType,targetId,5*60*1000);
+      return typeof cached==='boolean'?cached:null;
+    }
+  }});
+  pumpPresenceProbeQueue();
+  return promise;
+}
+
 function normalizeActionRefreshSeconds(value) {
   const seconds = Number(value);
   return ACTION_REFRESH_SECONDS.has(seconds) ? seconds : DEFAULT_ACTION_REFRESH_SECONDS;
@@ -298,22 +465,44 @@ function stopActionRefreshScheduler() {
   actionRefreshTimer = null;
 }
 
+async function refreshVisibleActionsFromSharedSnapshot() {
+  if (actionRefreshRunning) return;
+  actionRefreshRunning = true;
+  try {
+    const token = String(globalSettings.token || '').trim();
+    if (token) {
+      try {
+        // Один /user/info на весь цикл. Все refresh-функции ниже читают уже
+        // полученный snapshot из общего кэша и не создают пачку GET /devices/:id.
+        await getUserInfo(token, true);
+      } catch (e) {
+        errorLine('ACTION_REFRESH_SNAPSHOT_ERROR', e?.message || String(e));
+        return;
+      }
+    }
+
+    const jobs = [];
+    for (const context of visibleContexts) {
+      const action = actionByContext[context];
+      if (!action) continue;
+      jobs.push(Promise.resolve(refreshAction(context, action)).catch(e => {
+        errorLine('ACTION_REFRESH_ERROR', action, e?.message || String(e));
+      }));
+    }
+    await Promise.all(jobs);
+  } finally {
+    actionRefreshRunning = false;
+  }
+}
+
 function scheduleActionRefresh() {
   stopActionRefreshScheduler();
   const seconds = normalizeActionRefreshSeconds(globalSettings.actionRefreshSeconds);
   if (seconds <= 0) return;
 
-  actionRefreshTimer = setTimeout(() => {
+  actionRefreshTimer = setTimeout(async () => {
     actionRefreshTimer = null;
-    let delay = 0;
-    for (const context of visibleContexts) {
-      const action = actionByContext[context];
-      if (!action) continue;
-      setTimeout(() => {
-        if (visibleContexts.has(context)) refreshAction(context, action);
-      }, delay);
-      delay += ACTION_REFRESH_STAGGER_MS;
-    }
+    await refreshVisibleActionsFromSharedSnapshot();
     scheduleActionRefresh();
   }, seconds * 1000);
   actionRefreshTimer.unref?.();
@@ -410,6 +599,9 @@ function setGlobalSettings(patch) {
   next.tokenExpiresAt = Math.max(0, Number(next.tokenExpiresAt) || 0);
   next.tokenLifetimeSeconds = Math.max(0, Number(next.tokenLifetimeSeconds) || 0);
   next.tokenExpiryCapturedAt = Math.max(0, Number(next.tokenExpiryCapturedAt) || 0);
+  next.oauthRefreshToken = String(next.oauthRefreshToken || '').trim();
+  next.oauthDeviceId = String(next.oauthDeviceId || '').trim();
+  next.oauthAuthMethod = String(next.oauthAuthMethod || '').trim();
   next.actionRefreshSeconds = normalizeActionRefreshSeconds(next.actionRefreshSeconds);
   globalSettings = next;
   debugLoggingEnabled = globalSettings.debugMode === true;
@@ -474,6 +666,8 @@ function resetPluginCompletely() {
   userInfoInFlight = { token: '', promise: null };
   dashboardDataCache = { token: '', at: 0, data: null };
   dashboardPresenceCache = { token: '', at: 0, devices: [], groups: [] };
+  yandexOAuthSession = null;
+  clearYandexOAuthAuthRequired();
 
   for (const context of Object.keys(settingsByContext)) {
     const fresh = normalizeActionSettings({ __fullResetAt: resetAt });
@@ -481,7 +675,7 @@ function resetPluginCompletely() {
     persist(context, fresh);
   }
 
-  globalSettings = { token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS, fullResetAt: resetAt };
+  globalSettings = { token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, oauthRefreshToken: '', oauthDeviceId: '', oauthAuthMethod: '', actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS, fullResetAt: resetAt };
   scheduleActionRefresh();
   for (const context of visibleContexts) { try { refreshAction(context, actionByContext[context]); } catch (_) {} }
   debugLoggingEnabled = false;
@@ -498,7 +692,7 @@ function resetPluginCompletely() {
     try { fs.unlinkSync(file); } catch (_) {}
   }
   try {
-    const tmpDir=process.env.TMPDIR||'/tmp';
+    const tmpDir=os.tmpdir();
     for(const name of fs.readdirSync(tmpDir)){
       if(name.startsWith('yandex-smarthome-streamdock-dashboard')||name.startsWith('nbord-yandex-smarthome-streamdock-dashboard')){
         try{fs.unlinkSync(path.join(tmpDir,name));}catch(_){}
@@ -861,15 +1055,36 @@ function curtainImageDataUri(name, value, statusText = '') {
   return 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
 }
 
-async function yandexRequest(token, apiPath, options = {}) {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function isTransientYandexError(error) {
+  if (!error) return false;
+  if (error.code === 'YANDEX_TIMEOUT') return true;
+  if ([429, 500, 502, 503, 504].includes(Number(error.httpStatus))) return true;
+  const code = String(error?.cause?.code || error?.code || '');
+  if (['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ENETUNREACH', 'EHOSTUNREACH', 'EAI_AGAIN'].includes(code)) return true;
+  return error instanceof TypeError && /fetch failed/i.test(String(error.message || ''));
+}
+
+async function yandexRequestOnce(token, apiPath, options = {}) {
   const cleanToken = String(token || '').trim();
   if (!cleanToken) throw new Error('OAuth-токен не указан');
 
+  const method = String(options.method || 'GET').toUpperCase();
+  const requestTimeoutMs = Math.max(1000, Math.min(60000, Number(options.timeoutMs) || YANDEX_REQUEST_TIMEOUT_MS));
+  const url = YANDEX_API + apiPath;
+
+  if (IS_WINDOWS && windowsYandexPowerShellPreferred && options.noWindowsFallback !== true) {
+    return windowsPowerShellJsonRequest(url, cleanToken, method, options.body || '', requestTimeoutMs);
+  }
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(YANDEX_API + apiPath, {
-      method: options.method || 'GET',
+    const response = await fetch(url, {
+      method,
       headers: {
         'Authorization': `Bearer ${cleanToken}`,
         ...(options.body ? { 'Content-Type': 'application/json' } : {})
@@ -884,18 +1099,67 @@ async function yandexRequest(token, apiPath, options = {}) {
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Токен недействителен или не имеет нужного доступа. Нужны iot:view и iot:control.');
+        const authError = new Error('Требуется повторная авторизация через Яндекс. Токен недействителен или больше не имеет нужного доступа.');
+        authError.code = 'YANDEX_AUTH_ERROR';
+        authError.httpStatus = response.status;
+        if (cleanToken === String(globalSettings.token || '').trim()) markYandexOAuthAuthRequired();
+        throw authError;
       }
-      throw new Error(json?.message || `HTTP ${response.status}`);
+      const error = new Error(json?.message || `HTTP ${response.status}`);
+      error.httpStatus = response.status;
+      throw error;
     }
     if (json?.status === 'error') throw new Error(json.message || 'Яндекс вернул ошибку');
     return json;
   } catch (e) {
-    if (e?.name === 'AbortError') throw new Error('Яндекс не ответил за 12 секунд.');
-    throw e;
+    let normalized=e;
+    if (e?.name === 'AbortError') {
+      normalized = new Error(`Яндекс не ответил за ${Math.round(requestTimeoutMs / 1000)} секунд.`);
+      normalized.code = 'YANDEX_TIMEOUT';
+    }
+    if (IS_WINDOWS && options.noWindowsFallback !== true && isTransientYandexError(normalized)) {
+      try {
+        const result = await windowsPowerShellJsonRequest(url, cleanToken, method, options.body || '', requestTimeoutMs);
+        windowsYandexPowerShellPreferred = true;
+        logLine('YANDEX_WINDOWS_TRANSPORT', 'powershell', apiPath);
+        return result;
+      } catch (fallbackError) {
+        debugLine('YANDEX_WINDOWS_FALLBACK_ERROR', apiPath, fallbackError?.message || String(fallbackError));
+      }
+    }
+    throw normalized;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function yandexRequest(token, apiPath, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const maxAttempts = method === 'GET' && options.noRetry !== true ? 1 + YANDEX_GET_RETRIES : 1;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await yandexRequestOnce(token, apiPath, options);
+    } catch (e) {
+      lastError = e;
+      const transient = isTransientYandexError(e);
+      if (attempt >= maxAttempts) {
+        if (transient && e?.code !== 'YANDEX_TIMEOUT') {
+          const wrapped = new Error(`Не удалось получить ответ от Яндекс API после повторной попытки: ${e?.message || 'ошибка сети'}`);
+          wrapped.code = 'YANDEX_NETWORK_ERROR';
+          wrapped.cause = e;
+          throw wrapped;
+        }
+        throw e;
+      }
+      if (!transient) throw e;
+      const delay = YANDEX_RETRY_DELAY_MS * attempt;
+      logLine('YANDEX_RETRY', apiPath, `attempt=${attempt + 1}/${maxAttempts}`, `delay=${delay}ms`, e?.message || String(e));
+      await sleep(delay);
+    }
+  }
+  throw lastError || new Error('Не удалось выполнить запрос к Яндексу.');
 }
 
 function logDiscoverySummary(data) {
@@ -1464,71 +1728,54 @@ function decorateDevicesForDashboard(devices) {
   return devices.map(d => ({ ...d, curtainReverse: false }));
 }
 
-async function hydrateEntitiesOnline(token, devices, groups) {
-  const items = [
-    ...devices.map((entity, index) => ({ entity, index, targetType: 'device' })),
-    ...groups.map((entity, index) => ({ entity, index, targetType: 'group' }))
-  ];
-  const outDevices = devices.map(x => ({ ...x }));
-  const outGroups = groups.map(x => ({ ...x }));
-  let cursor = 0;
-  async function worker() {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      try {
-        const snap = await readTargetSnapshot(token, item.targetType, item.entity.id);
-        const merged = {
-          ...item.entity,
-          online: snap.online,
-          power: snap.power,
-          hasOnOff: snap.hasOnOff,
-          onOffRetrievable: snap.onOffRetrievable,
-          brightness: snap.brightness,
-          open: snap.open,
-          temperature: snap.temperature,
-          ranges: snap.ranges,
-          modes: snap.modes,
-          toggles: snap.toggles,
-          color: snap.color,
-          properties: item.targetType === 'device' ? snap.properties : (item.entity.properties || [])
-        };
-        if (item.targetType === 'group') outGroups[item.index] = merged;
-        else outDevices[item.index] = merged;
-      } catch (e) {
-        // Ошибка запроса не равна offline. Оставляем unknown, чтобы не вводить пользователя в заблуждение.
-        logLine('STATUS_REFRESH_WARN', item.targetType, item.entity.id, e?.message || String(e));
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(8, Math.max(1, items.length)) }, () => worker()));
-  return { devices: outDevices, groups: outGroups };
-}
 
 async function dashboardPresenceSnapshot(token, force=false) {
-  const now=Date.now();
-  if(!force && dashboardPresenceCache.token===token && now-dashboardPresenceCache.at<60000){
-    return {devices:dashboardPresenceCache.devices,groups:dashboardPresenceCache.groups,checkedAt:dashboardPresenceCache.at,cached:true};
+  const now = Date.now();
+  if (!force && dashboardPresenceCache.token === token && now - dashboardPresenceCache.at < 60000) {
+    return { devices: dashboardPresenceCache.devices, groups: dashboardPresenceCache.groups, checkedAt: dashboardPresenceCache.at, cached: true };
   }
-  let baseDevices=Array.isArray(dashboardDataCache.data?.devices)?dashboardDataCache.data.devices:[];
-  let baseGroups=Array.isArray(dashboardDataCache.data?.groups)?dashboardDataCache.data.groups:[];
-  if(!baseDevices.length&&!baseGroups.length){
-    const info=await getUserInfo(token,false);
-    baseDevices=normalizeDevices(info);
-    baseGroups=normalizeGroups(info,baseDevices);
-  }
-  const started=Date.now();
-  const hydrated=await hydrateEntitiesOnline(token,baseDevices,baseGroups);
-  const devices=hydrated.devices.map(d=>({id:String(d.id||''),online:typeof d.online==='boolean'?d.online:null,offlineText:d.online===false?offlineStatusText('device',d.id):''}));
-  const groups=hydrated.groups.map(g=>({id:String(g.id||''),online:typeof g.online==='boolean'?g.online:null,offlineText:g.online===false?offlineStatusText('group',g.id):''}));
-  dashboardPresenceCache={token,at:Date.now(),devices,groups};
-  if(dashboardDataCache.data&&dashboardDataCache.token===token){
-    const dMap=new Map(devices.map(x=>[x.id,x])),gMap=new Map(groups.map(x=>[x.id,x]));
-    dashboardDataCache.data={...dashboardDataCache.data,
+
+  const started = Date.now();
+  const info = await getUserInfo(token, force);
+  const baseDevices = normalizeDevices(info);
+  const baseGroups = normalizeGroups(info, baseDevices);
+
+  // /user/info отдаёт capabilities/properties, но state у части устройств отсутствует.
+  // Для online/offline используем точечные GET /devices/:id, ограничивая очередь
+  // тремя параллельными запросами и кэшируя результат, чтобы не вернуть старый N+1 шторм.
+  await Promise.all(baseDevices.map(async device => {
+    if(typeof device.online==='boolean'){noteTargetPresence('device',device.id,device.online);return;}
+    await probeTargetPresence(token,'device',device.id,force);
+  }));
+
+  const devices = baseDevices.map(device => {
+    const online = typeof device.online==='boolean' ? device.online : cachedTargetPresence('device',device.id,5*60*1000);
+    if(typeof online==='boolean')noteTargetPresence('device',device.id,online);
+    return {id:String(device.id||''),online:typeof online==='boolean'?online:null,offlineText:online===false?offlineStatusText('device',device.id):''};
+  });
+
+  const deviceStatusMap = new Map(devices.map(x=>[String(x.id),x.online]));
+  const groups = baseGroups.map(group => {
+    let online = typeof group.online==='boolean' ? group.online : null;
+    if(typeof online!=='boolean' && Array.isArray(group.memberIds) && group.memberIds.length){
+      const states=group.memberIds.map(id=>deviceStatusMap.get(String(id))).filter(x=>typeof x==='boolean');
+      if(states.some(x=>x===true))online=true;
+      else if(states.length===group.memberIds.length&&states.every(x=>x===false))online=false;
+    }
+    if(typeof online==='boolean')noteTargetPresence('group',group.id,online);
+    return {id:String(group.id||''),online:typeof online==='boolean'?online:null,offlineText:online===false?offlineStatusText('group',group.id):''};
+  });
+
+  dashboardPresenceCache = { token, at: Date.now(), devices, groups };
+  if (dashboardDataCache.data && dashboardDataCache.token === token) {
+    const dMap = new Map(devices.map(x => [x.id, x]));
+    const gMap = new Map(groups.map(x => [x.id, x]));
+    dashboardDataCache.data = {...dashboardDataCache.data,
       devices:(dashboardDataCache.data.devices||[]).map(d=>{const st=dMap.get(String(d.id));return st&&typeof st.online==='boolean'?{...d,online:st.online,offlineText:st.offlineText||''}:d;}),
       groups:(dashboardDataCache.data.groups||[]).map(g=>{const st=gMap.get(String(g.id));return st&&typeof st.online==='boolean'?{...g,online:st.online,offlineText:st.offlineText||''}:g;})
     };
   }
-  debugLine('DASHBOARD_PRESENCE',`ms=${Date.now()-started}`,`devices=${devices.length}`,`groups=${groups.length}`);
+  debugLine('DASHBOARD_PRESENCE',`ms=${Date.now()-started}`,`devices=${devices.length}`,`groups=${groups.length}`,`concurrency=${PRESENCE_PROBE_CONCURRENCY}`);
   return {devices,groups,checkedAt:dashboardPresenceCache.at,cached:false};
 }
 
@@ -1601,6 +1848,64 @@ async function readTargetSnapshot(token, targetType, id) {
   return snap;
 }
 
+let normalizedTargetCache = { source: null, devices: new Map(), groups: new Map() };
+
+function normalizedTargetsFromUserInfo(data) {
+  if (normalizedTargetCache.source === data) return normalizedTargetCache;
+  const devices = normalizeDevices(data);
+  const groups = normalizeGroups(data, devices);
+  normalizedTargetCache = {
+    source: data,
+    devices: new Map(devices.map(device => [String(device.id), device])),
+    groups: new Map(groups.map(group => [String(group.id), group]))
+  };
+  return normalizedTargetCache;
+}
+
+function snapshotFromNormalizedTarget(entity) {
+  if (!entity) return null;
+  return {
+    online: typeof entity.online === 'boolean' ? entity.online : null,
+    power: typeof entity.power === 'boolean' ? entity.power : null,
+    hasOnOff: Boolean(entity.hasOnOff),
+    onOffRetrievable: Boolean(entity.hasOnOff) && entity.onOffRetrievable !== false,
+    brightness: entity.brightness || null,
+    open: entity.open || null,
+    temperature: entity.temperature || null,
+    ranges: Array.isArray(entity.ranges) ? entity.ranges : [],
+    modes: Array.isArray(entity.modes) ? entity.modes : [],
+    toggles: Array.isArray(entity.toggles) ? entity.toggles : [],
+    color: entity.color || null,
+    properties: Array.isArray(entity.properties) ? entity.properties : []
+  };
+}
+
+async function readTargetSnapshotForRefresh(token, targetType, id) {
+  const data = await getUserInfo(token, false);
+  const targets = normalizedTargetsFromUserInfo(data);
+  const normalizedType = targetType === 'group' ? 'group' : 'device';
+  const entity = normalizedType === 'group' ? targets.groups.get(String(id)) : targets.devices.get(String(id));
+  if (!entity) throw new Error(normalizedType === 'group' ? 'Группа не найдена в актуальном состоянии дома.' : 'Устройство не найдено в актуальном состоянии дома.');
+  const snap = snapshotFromNormalizedTarget(entity);
+  if(typeof snap.online==='boolean'){
+    noteTargetPresence(normalizedType,id,snap.online);
+  }else{
+    const probed=await probeTargetPresence(token,normalizedType,id,false);
+    if(typeof probed==='boolean')snap.online=probed;
+  }
+  const cached=cachedTargetPresence(normalizedType,id,90000);
+  if(typeof cached==='boolean')snap.online=cached;
+  return snap;
+}
+
+function invalidateSharedSnapshots(token = '') {
+  const currentToken = String(token || '').trim();
+  if (!currentToken || userInfoCache.token === currentToken) userInfoCache = { token: '', at: 0, data: null };
+  normalizedTargetCache = { source: null, devices: new Map(), groups: new Map() };
+  dashboardDataCache = { token: '', at: 0, data: null };
+  dashboardPresenceCache = { token: '', at: 0, devices: [], groups: [] };
+}
+
 function findActionResult(result, deviceId, type, instance) {
   const devices = result?.devices || result?.payload?.devices || [];
   const device = devices.find(d => d?.id === deviceId) || devices[0];
@@ -1633,6 +1938,7 @@ async function setDevicePower(token, deviceId, value) {
     })
   });
   assertActionDone(result, deviceId, CAP_ONOFF, 'on', 'Яндекс не выполнил команду включения/выключения.');
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1649,6 +1955,7 @@ async function setRangeValue(token, deviceId, instance, value, relative = false)
     })
   });
   assertActionDone(result, deviceId, CAP_RANGE, String(instance), `Яндекс не выполнил изменение ${instance}.`);
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1664,6 +1971,7 @@ async function setModeValue(token, deviceId, instance, value) {
     }] }] })
   });
   assertActionDone(result, deviceId, CAP_MODE, String(instance), `Яндекс не выполнил изменение режима ${instance}.`);
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1675,6 +1983,7 @@ async function setToggleValue(token, deviceId, instance, value) {
     }] }] })
   });
   assertActionDone(result, deviceId, CAP_TOGGLE, String(instance), `Яндекс не выполнил переключатель ${instance}.`);
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1686,6 +1995,7 @@ async function setColorValue(token, deviceId, instance, value) {
     }] }] })
   });
   assertActionDone(result, deviceId, CAP_COLOR, String(instance), `Яндекс не выполнил изменение цвета ${instance}.`);
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1709,6 +2019,7 @@ async function sendTargetAction(token, targetType, id, type, state, fallback) {
       body: JSON.stringify({ devices: [{ id, actions: [{ type, state }] }] })
     });
     assertActionDone(result, id, type, state?.instance, fallback);
+    invalidateSharedSnapshots(token);
     return result;
   }
   const result = await yandexRequest(token, `/groups/${encodeURIComponent(id)}/actions`, {
@@ -1716,6 +2027,7 @@ async function sendTargetAction(token, targetType, id, type, state, fallback) {
     body: JSON.stringify({ actions: [{ type, state }] })
   });
   assertGroupActionDone(result, type, state?.instance, fallback);
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1739,6 +2051,7 @@ async function setTargetColor(token, targetType, id, instance, value) {
 async function runScenario(token, scenarioId) {
   const result = await yandexRequest(token, `/scenarios/${encodeURIComponent(scenarioId)}/actions`, { method: 'POST' });
   if (result?.status && result.status !== 'ok') throw new Error(result?.message || 'Сценарий не запущен.');
+  invalidateSharedSnapshots(token);
   return result;
 }
 
@@ -1856,7 +2169,7 @@ async function refreshToggle(context, action = ACTION_TOGGLE) {
     return;
   }
   try {
-    const snapshot = await readTargetSnapshot(token, s.targetType, s.deviceId);
+    const snapshot = await readTargetSnapshotForRefresh(token, s.targetType, s.deviceId);
     if (snapshot.online === false) {
       setImage(context, icons.offline);
       setTitle(context, offlineStatusText(s.targetType,s.deviceId));
@@ -1923,7 +2236,7 @@ async function refreshBrightness(context) {
   rt.deviceId = s.deviceId;
   renderBrightness(context, 'ОБНОВЛЕНИЕ');
   try {
-    const snapshot = await readTargetSnapshot(token, s.targetType, s.deviceId);
+    const snapshot = await readTargetSnapshotForRefresh(token, s.targetType, s.deviceId);
     if (snapshot.online === false) { rt.value=null; rt.hasBrightness=false; rt.power=null; renderBrightness(context,offlineStatusText(s.targetType,s.deviceId)); return; }
     if (!snapshot.brightness) throw new Error('У лампы нет управления яркостью.');
     rt.value = snapshot.brightness.value;
@@ -2072,7 +2385,7 @@ async function refreshSensor(context) {
     return;
   }
   try {
-    const snapshot = await readTargetSnapshot(token, s.targetType, s.deviceId);
+    const snapshot = await readTargetSnapshotForRefresh(token, s.targetType, s.deviceId);
     if (snapshot.online === false) { setImage(context, sensorImageDataUri(s.deviceName || 'Датчик', null, offlineStatusText(s.targetType,s.deviceId), '', s.sensorDialStyle)); return; }
     if (!snapshot.properties.length) throw new Error('У устройства нет доступных показаний.');
     let prop = snapshot.properties.find(p => p.instance === s.propertyInstance) || snapshot.properties[0];
@@ -2095,7 +2408,7 @@ async function refreshCombinedSensor(context){
   const s=getSettings(context),token=tokenForContext(context),rt=combinedRuntimeFor(context),style=['minimal','widget'].includes(s.sensorDialStyle)?s.sensorDialStyle:'widget';setTitle(context,'');
   if(!token||!s.deviceId){setImage(context,combinedSensorImageDataUri('Датчик',[],'НАСТРОЙТЕ',style));return;}
   try{
-    const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);
+    const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);
     if(snap.online===false){setImage(context,combinedSensorImageDataUri(s.deviceName||'Датчик',[],offlineStatusText(s.targetType,s.deviceId),style));return;}
     const props=selectedCombinedProps(snap,s);if(!props.length)throw new Error('Показания не найдены.');
     if(informationContexts.has(context)){
@@ -2116,7 +2429,7 @@ async function refreshSensorMultiDial(context){
   const style=['minimal','widget'].includes(s.sensorDialStyle)?s.sensorDialStyle:'widget';
   if(!token||!s.deviceId){setImage(context,sensorDialImageDataUri('Датчик',null,0,1,style,'',false,'НАСТРОЙТЕ'));return;}
   try{
-    const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);
+    const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);
     if(snap.online===false){setImage(context,sensorDialImageDataUri(s.deviceName||'Датчик',null,0,1,style,'',false,offlineStatusText(s.targetType,s.deviceId)));return;}
     const props=selectedCombinedProps(snap,s);if(!props.length)throw new Error('Показания не найдены.');
     rt.total=props.length;rt.index=Math.max(0,Math.min(rt.index,props.length-1));
@@ -2190,7 +2503,7 @@ async function refreshCurtain(context) {
   rt.deviceId = s.deviceId;
   renderCurtain(context, 'ОБНОВЛЕНИЕ');
   try {
-    const snapshot = await readTargetSnapshot(token, s.targetType, s.deviceId);
+    const snapshot = await readTargetSnapshotForRefresh(token, s.targetType, s.deviceId);
     if (snapshot.online === false) { rt.value=null; rt.hasOpen=false; renderCurtain(context,offlineStatusText(s.targetType,s.deviceId)); return; }
     if (!snapshot.open) throw new Error('У устройства нет управления открытием.');
     rt.min = snapshot.open.min;
@@ -2443,7 +2756,7 @@ async function refreshRangeKnob(context, action) {
   const cfg=rangeActionConfig(action), s=getSettings(context), token=tokenForContext(context), rt=rangeRuntimeFor(context);
   if (!cfg || !token || !s.deviceId) { renderRangeKnob(context, action, 'НАСТРОЙТЕ'); return; }
   try {
-    const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);
+    const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);
     if(snap.online===false){renderRangeKnob(context,action,offlineStatusText(s.targetType,s.deviceId));return;}
     const desc=snap.ranges.find(x=>x.instance===cfg.instance);
     if (!desc) throw new Error('Нужный диапазон не поддерживается.');
@@ -2503,7 +2816,7 @@ function renderColorTemp(context,status=''){
 async function refreshColorTemp(context){
   const s=getSettings(context),token=tokenForContext(context),rt=colorTempRuntimeFor(context);
   if(!token||!s.deviceId){renderColorTemp(context,'НАСТРОЙТЕ');return;}
-  try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false){renderColorTemp(context,offlineStatusText(s.targetType,s.deviceId));return;}if(!snap.color?.supportsTemperature)throw new Error('Температура света не поддерживается.');rt.deviceId=s.deviceId;rt.min=snap.color.temperatureMin;rt.max=snap.color.temperatureMax;rt.value=snap.color.stateInstance==='temperature_k'&&Number.isFinite(Number(snap.color.stateValue))?Number(snap.color.stateValue):Math.max(rt.min,Math.min(rt.max,4500));rt.power=snap.power;renderColorTemp(context);}catch(e){errorLine('COLORTEMP_REFRESH_ERROR',e?.message||String(e));renderColorTemp(context,'НЕТ СВЯЗИ');}
+  try{const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);if(snap.online===false){renderColorTemp(context,offlineStatusText(s.targetType,s.deviceId));return;}if(!snap.color?.supportsTemperature)throw new Error('Температура света не поддерживается.');rt.deviceId=s.deviceId;rt.min=snap.color.temperatureMin;rt.max=snap.color.temperatureMax;rt.value=snap.color.stateInstance==='temperature_k'&&Number.isFinite(Number(snap.color.stateValue))?Number(snap.color.stateValue):Math.max(rt.min,Math.min(rt.max,4500));rt.power=snap.power;renderColorTemp(context);}catch(e){errorLine('COLORTEMP_REFRESH_ERROR',e?.message||String(e));renderColorTemp(context,'НЕТ СВЯЗИ');}
 }
 function applyColorTempTicks(context,ticks){
   ticks=Number(ticks)||0;if(!ticks)return;const s=getSettings(context),token=tokenForContext(context),rt=colorTempRuntimeFor(context);
@@ -2516,12 +2829,12 @@ async function commitColorTemp(context){const s=getSettings(context),token=token
 function modeRuntimeFor(context){let rt=modeRuntime.get(context);if(!rt){rt={deviceId:'',modes:[],value:null,index:0,power:null,timer:null};modeRuntime.set(context,rt);}return rt;}
 const MODE_LABELS={auto:'Авто',fast:'Быстро',medium:'Средняя',slow:'Медленно',low:'Низкая',high:'Высокая',turbo:'Турбо',max:'Максимум',min:'Минимум',quiet:'Тихо',eco:'Эко',normal:'Обычная',express:'Экспресс',cool:'Охлаждение',heat:'Нагрев',fan_only:'Вентиляция',dry:'Осушение',wet_cleaning:'Влажная',dry_cleaning:'Сухая',mixed_cleaning:'Смешанная'};
 function renderVacuum(context,status=''){const s=getSettings(context),rt=modeRuntimeFor(context);if(rt.value){setImage(context,selectedModeImageDataUri(s.deviceName||'Пылесос',rt.value,status||'СКОРОСТЬ','#62A8FF'));return;}setImage(context,genericKnobImageDataUri(s.deviceName||'Пылесос','—',0,status||'СКОРОСТЬ','#62A8FF'));}
-async function refreshVacuum(context){const s=getSettings(context),token=tokenForContext(context),rt=modeRuntimeFor(context);if(!token||!s.deviceId){renderVacuum(context,'НАСТРОЙТЕ');return;}try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false){renderVacuum(context,offlineStatusText(s.targetType,s.deviceId));return;}const m=snap.modes.find(x=>x.instance==='work_speed');if(!m||!m.modes.length)throw new Error('Скорость работы не поддерживается.');rt.deviceId=s.deviceId;rt.modes=m.modes;rt.value=m.value&&m.modes.includes(m.value)?m.value:m.modes[0];rt.index=Math.max(0,m.modes.indexOf(rt.value));rt.power=snap.power;renderVacuum(context);}catch(e){errorLine('VACUUM_REFRESH_ERROR',e?.message||String(e));renderVacuum(context,'НЕТ СВЯЗИ');}}
+async function refreshVacuum(context){const s=getSettings(context),token=tokenForContext(context),rt=modeRuntimeFor(context);if(!token||!s.deviceId){renderVacuum(context,'НАСТРОЙТЕ');return;}try{const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);if(snap.online===false){renderVacuum(context,offlineStatusText(s.targetType,s.deviceId));return;}const m=snap.modes.find(x=>x.instance==='work_speed');if(!m||!m.modes.length)throw new Error('Скорость работы не поддерживается.');rt.deviceId=s.deviceId;rt.modes=m.modes;rt.value=m.value&&m.modes.includes(m.value)?m.value:m.modes[0];rt.index=Math.max(0,m.modes.indexOf(rt.value));rt.power=snap.power;renderVacuum(context);}catch(e){errorLine('VACUUM_REFRESH_ERROR',e?.message||String(e));renderVacuum(context,'НЕТ СВЯЗИ');}}
 function applyVacuumTicks(context,ticks){ticks=Number(ticks)||0;if(!ticks)return;const s=getSettings(context),rt=modeRuntimeFor(context),token=tokenForContext(context);if(!token||!s.deviceId){showAlert(context);renderVacuum(context,'НАСТРОЙТЕ');return;}if(rt.deviceId!==s.deviceId||!rt.modes.length){refreshVacuum(context);return;}rt.index=Math.max(0,Math.min(rt.modes.length-1,rt.index+(ticks>0?1:-1)));rt.value=rt.modes[rt.index];renderVacuum(context);if(rt.timer)clearTimeout(rt.timer);rt.timer=setTimeout(async()=>{try{await setTargetMode(token,s.targetType,s.deviceId,'work_speed',rt.value);renderVacuum(context);}catch(e){errorLine('VACUUM_SET_ERROR',e?.message||String(e));showAlert(context);renderVacuum(context,'ОШИБКА');}},160);}
 
 function climateModeForSnapshot(snap,settings){return snap.modes.find(x=>x.instance===settings.climateModeInstance)||snap.modes.find(x=>['fan_speed','work_speed'].includes(x.instance))||snap.modes[0]||null;}
 function renderClimate(context,status=''){const s=getSettings(context),rt=modeRuntimeFor(context);if(rt.value&&['fan_speed','work_speed'].includes(rt.modeInstance)){setImage(context,selectedModeImageDataUri(s.deviceName||'Климат',rt.value,status||'СКОРОСТЬ','#7C5CFF'));return;}const v=rt.value?MODE_LABELS[rt.value]||rt.value:'—';const progress=rt.modes.length>1?rt.index/(rt.modes.length-1):0;setImage(context,genericKnobImageDataUri(s.deviceName||'Климат',v,progress,status||'РЕЖИМ','#6BD3B3'));}
-async function refreshClimate(context){const s=getSettings(context),token=tokenForContext(context),rt=modeRuntimeFor(context);if(!token||!s.deviceId){renderClimate(context,'НАСТРОЙТЕ');return;}try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false){renderClimate(context,offlineStatusText(s.targetType,s.deviceId));return;}const m=climateModeForSnapshot(snap,s);if(!m||!m.modes.length)throw new Error('Режимы устройства не найдены.');if(m.instance!==s.climateModeInstance)saveSettings(context,{climateModeInstance:m.instance});rt.deviceId=s.deviceId;rt.modeInstance=m.instance;rt.modes=m.modes;rt.value=m.value&&m.modes.includes(m.value)?m.value:m.modes[0];rt.index=Math.max(0,m.modes.indexOf(rt.value));rt.power=snap.power;renderClimate(context);}catch(e){errorLine('CLIMATE_REFRESH_ERROR',e?.message||String(e));renderClimate(context,'НЕТ СВЯЗИ');}}
+async function refreshClimate(context){const s=getSettings(context),token=tokenForContext(context),rt=modeRuntimeFor(context);if(!token||!s.deviceId){renderClimate(context,'НАСТРОЙТЕ');return;}try{const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);if(snap.online===false){renderClimate(context,offlineStatusText(s.targetType,s.deviceId));return;}const m=climateModeForSnapshot(snap,s);if(!m||!m.modes.length)throw new Error('Режимы устройства не найдены.');if(m.instance!==s.climateModeInstance)saveSettings(context,{climateModeInstance:m.instance});rt.deviceId=s.deviceId;rt.modeInstance=m.instance;rt.modes=m.modes;rt.value=m.value&&m.modes.includes(m.value)?m.value:m.modes[0];rt.index=Math.max(0,m.modes.indexOf(rt.value));rt.power=snap.power;renderClimate(context);}catch(e){errorLine('CLIMATE_REFRESH_ERROR',e?.message||String(e));renderClimate(context,'НЕТ СВЯЗИ');}}
 function applyClimateTicks(context,ticks){ticks=Number(ticks)||0;if(!ticks)return;const s=getSettings(context),rt=modeRuntimeFor(context),token=tokenForContext(context);if(!token||!s.deviceId){showAlert(context);renderClimate(context,'НАСТРОЙТЕ');return;}if(rt.deviceId!==s.deviceId||!rt.modes.length){refreshClimate(context);return;}rt.index=Math.max(0,Math.min(rt.modes.length-1,rt.index+(ticks>0?1:-1)));rt.value=rt.modes[rt.index];renderClimate(context);if(rt.timer)clearTimeout(rt.timer);rt.timer=setTimeout(async()=>{try{await setTargetMode(token,s.targetType,s.deviceId,rt.modeInstance||s.climateModeInstance,rt.value);renderClimate(context);}catch(e){errorLine('CLIMATE_SET_ERROR',e?.message||String(e));showAlert(context);renderClimate(context,'ОШИБКА');}},160);}
 
 async function toggleKnobPower(context, action, refreshFn){const s=getSettings(context),token=tokenForContext(context);if(!token||!s.deviceId){showAlert(context);return;}try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false)throw new Error('Устройство не в сети.');if(!snap.hasOnOff||snap.power===null)throw new Error('Устройство не сообщает состояние Вкл/Выкл.');await setTargetPower(token,s.targetType,s.deviceId,!snap.power);await refreshFn(context);}catch(e){errorLine('KNOB_POWER_ERROR',action,e?.message||String(e));showAlert(context);}}
@@ -2533,7 +2846,7 @@ async function mediaChannelPress(context){const s=getSettings(context);const cfg
 
 function colorDialRuntimeFor(context){let rt=colorDialRuntime.get(context);if(!rt){rt={index:0,power:true,deviceId:'',timer:null,sending:false,dirty:false};colorDialRuntime.set(context,rt);}return rt;}
 function renderColorDial(context,status='ЦВЕТ'){const s=getSettings(context),rt=colorDialRuntimeFor(context),item=COLOR_DIAL_PALETTE[((rt.index%COLOR_DIAL_PALETTE.length)+COLOR_DIAL_PALETTE.length)%COLOR_DIAL_PALETTE.length];setImage(context,colorDialImageDataUri(s.deviceName||'Свет',item,rt.power,status));setTitle(context,'');}
-async function refreshColorDial(context){const s=getSettings(context),token=tokenForContext(context),rt=colorDialRuntimeFor(context);if(!token||!s.deviceId){setImage(context,colorDialImageDataUri('Настройте',COLOR_DIAL_PALETTE[0],false,'НЕТ УСТРОЙСТВА'));setTitle(context,'');return;}try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false){rt.power=false;setImage(context,colorDialImageDataUri(s.deviceName||'Свет',COLOR_DIAL_PALETTE[rt.index]||COLOR_DIAL_PALETTE[0],false,offlineStatusText(s.targetType,s.deviceId)));return;}if(!snap.color||( !snap.color.supportsRgb && !snap.color.supportsHsv))throw new Error('Цвет не поддерживается.');rt.deviceId=s.deviceId;rt.power=snap.power;const current=colorStateRgb(snap.color);rt.index=Number.isFinite(current)?nearestPaletteIndex(current):Math.max(0,Math.min(COLOR_DIAL_PALETTE.length-1,Number(s.colorDialIndex)||0));renderColorDial(context);}catch(e){errorLine('COLORDIAL_REFRESH_ERROR',e?.message||String(e));renderColorDial(context,'НЕТ СВЯЗИ');}}
+async function refreshColorDial(context){const s=getSettings(context),token=tokenForContext(context),rt=colorDialRuntimeFor(context);if(!token||!s.deviceId){setImage(context,colorDialImageDataUri('Настройте',COLOR_DIAL_PALETTE[0],false,'НЕТ УСТРОЙСТВА'));setTitle(context,'');return;}try{const snap=await readTargetSnapshotForRefresh(token,s.targetType,s.deviceId);if(snap.online===false){rt.power=false;setImage(context,colorDialImageDataUri(s.deviceName||'Свет',COLOR_DIAL_PALETTE[rt.index]||COLOR_DIAL_PALETTE[0],false,offlineStatusText(s.targetType,s.deviceId)));return;}if(!snap.color||( !snap.color.supportsRgb && !snap.color.supportsHsv))throw new Error('Цвет не поддерживается.');rt.deviceId=s.deviceId;rt.power=snap.power;const current=colorStateRgb(snap.color);rt.index=Number.isFinite(current)?nearestPaletteIndex(current):Math.max(0,Math.min(COLOR_DIAL_PALETTE.length-1,Number(s.colorDialIndex)||0));renderColorDial(context);}catch(e){errorLine('COLORDIAL_REFRESH_ERROR',e?.message||String(e));renderColorDial(context,'НЕТ СВЯЗИ');}}
 function applyColorDialTicks(context,ticks){ticks=Number(ticks)||0;if(!ticks)return;const rt=colorDialRuntimeFor(context);rt.index=(rt.index+(ticks>0?Math.max(1,Math.abs(Math.trunc(ticks))):-Math.max(1,Math.abs(Math.trunc(ticks))))+COLOR_DIAL_PALETTE.length)%COLOR_DIAL_PALETTE.length;rt.power=true;renderColorDial(context,'ЦВЕТ');if(rt.timer)clearTimeout(rt.timer);rt.timer=setTimeout(()=>commitColorDial(context),85);}
 async function commitColorDial(context){const s=getSettings(context),token=tokenForContext(context),rt=colorDialRuntimeFor(context);if(!token||!s.deviceId)return;if(rt.sending){rt.dirty=true;return;}rt.sending=true;rt.dirty=false;const item=COLOR_DIAL_PALETTE[rt.index]||COLOR_DIAL_PALETTE[0];try{const snap=await readTargetSnapshot(token,s.targetType,s.deviceId);if(snap.online===false)throw new Error('Устройство не в сети.');if(snap.hasOnOff&&snap.power===false)await setTargetPower(token,s.targetType,s.deviceId,true);if(snap.color?.supportsRgb)await setTargetColor(token,s.targetType,s.deviceId,'rgb',item.rgb);else if(snap.color?.supportsHsv)await setTargetColor(token,s.targetType,s.deviceId,'hsv',rgbIntToHsv(item.rgb));else throw new Error('Устройство не поддерживает RGB/HSV.');rt.power=true;saveSettings(context,{colorDialIndex:rt.index});renderColorDial(context);}catch(e){errorLine('COLORDIAL_SET_ERROR',e?.message||String(e));showAlert(context);renderColorDial(context,'ОШИБКА');}finally{rt.sending=false;if(rt.dirty){rt.timer=setTimeout(()=>commitColorDial(context),80);}}}
 
@@ -2825,7 +3138,264 @@ function clearUsageStats(){usageStatsStore={version:1,entries:{}};try{fs.mkdirSy
 
 let dashboardHttpServer = null;
 let dashboardHttpPort = 0;
-const DASHBOARD_VERSION = '1.0.0';
+const DASHBOARD_VERSION = '1.1.0';
+const GITHUB_REPOSITORY = 'n-bord/yandex-smart-home-stream-dock';
+const GITHUB_RELEASES_URL = `https://github.com/${GITHUB_REPOSITORY}/releases`;
+const GITHUB_LATEST_RELEASE_API = `https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest`;
+const UPDATE_CHECK_CACHE_MS = 15 * 60 * 1000;
+let updateCheckCache = { at: 0, data: null };
+
+let yandexOAuthCallbackServer = null;
+let yandexOAuthCallbackReady = false;
+let yandexOAuthSession = null;
+let yandexOAuthAuthRequiredAt = 0;
+
+function clearYandexOAuthAuthRequired() { yandexOAuthAuthRequiredAt = 0; }
+function markYandexOAuthAuthRequired() {
+  if (!yandexOAuthAuthRequiredAt) yandexOAuthAuthRequiredAt = Date.now();
+}
+function scrubOAuthSessionSecrets(session) {
+  if (!session) return;
+  session.state = '';
+  session.codeVerifier = '';
+  session.deviceId = '';
+}
+function finishOAuthSession(session, status, message, extra = {}) {
+  if (!session) return null;
+  session.status = status;
+  session.message = String(message || '');
+  session.completedAt = Date.now();
+  Object.assign(session, extra || {});
+  scrubOAuthSessionSecrets(session);
+  return session;
+}
+
+function oauthBase64Url(buffer) {
+  return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function oauthRandomString(bytes = 48) { return oauthBase64Url(crypto.randomBytes(bytes)); }
+function oauthDeviceId() {
+  let id = String(globalSettings.oauthDeviceId || '').trim();
+  if (id.length >= 6 && id.length <= 50) return id;
+  id = `nbord-${crypto.randomBytes(12).toString('hex')}`;
+  setGlobalSettings({ oauthDeviceId: id });
+  return id;
+}
+function oauthDeviceName() { return `Stream Dock · ${SYSTEM_LABEL}`; }
+function oauthEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function oauthHtml(title, message, ok = true) {
+  const accent = ok ? '#7c5cff' : '#ff5d73', safeTitle=oauthEscape(title), safeMessage=oauthEscape(message);
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>body{margin:0;background:#0b1020;color:#f5f6fb;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;min-height:100vh}.card{width:min(560px,calc(100vw - 40px));box-sizing:border-box;background:#141c32;border:1px solid #293659;border-radius:22px;padding:32px;box-shadow:0 24px 80px rgba(0,0,0,.38)}.icon{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:${accent};font-size:28px;margin-bottom:20px}h1{font-size:24px;margin:0 0 12px}p{color:#aeb9d3;line-height:1.55;margin:0}.small{font-size:13px;margin-top:18px;color:#7f8aa5}</style></head><body><div class="card"><div class="icon">${ok?'✓':'!'}</div><h1>${safeTitle}</h1><p>${safeMessage}</p><p class="small">Можно закрыть эту вкладку и вернуться в панель Stream Dock.</p></div></body></html>`;
+}
+function oauthStatusSnapshot() {
+  const s = yandexOAuthSession;
+  if (!s) return { status: 'idle', redirectUri: YANDEX_OAUTH_REDIRECT_URI, clientId: YANDEX_OAUTH_CLIENT_ID };
+  if (s.expiresAt && Date.now() > s.expiresAt && !['success','error'].includes(s.status)) {
+    finishOAuthSession(s, 'error', 'Время авторизации истекло. Запустите вход ещё раз.');
+  }
+  return {
+    status: s.status || 'idle',
+    message: s.message || '',
+    startedAt: s.startedAt || 0,
+    expiresAt: s.expiresAt || 0,
+    redirectUri: YANDEX_OAUTH_REDIRECT_URI,
+    clientId: YANDEX_OAUTH_CLIENT_ID,
+    authorizationUrl: ['waiting','exchanging'].includes(String(s.status||'')) ? String(s.authorizationUrl || '') : '',
+    browserOpened: s.browserOpened !== false,
+    tokenExpiry: s.status === 'success' ? tokenExpirySnapshot() : null,
+    devices: Number(s.devices) || 0
+  };
+}
+async function exchangeYandexOAuthCode(session, code) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const form = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: String(code || ''),
+      client_id: YANDEX_OAUTH_CLIENT_ID,
+      code_verifier: session.codeVerifier,
+      device_id: session.deviceId,
+      device_name: oauthDeviceName()
+    });
+    const response = await fetch(YANDEX_OAUTH_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: form.toString(), signal: controller.signal
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.access_token) {
+      const err = new Error(data?.error_description || data?.error || `Яндекс OAuth HTTP ${response.status}`);
+      err.httpStatus = response.status; throw err;
+    }
+    const accessToken = String(data.access_token || '').trim();
+    const expiresIn = Math.max(0, Number(data.expires_in) || 0);
+    const capturedAt = Date.now();
+    const info = await getUserInfo(accessToken, true);
+    const devices = normalizeDevices(info).length;
+    setGlobalSettings({
+      token: accessToken,
+      tokenLifetimeSeconds: expiresIn,
+      tokenExpiryCapturedAt: expiresIn ? capturedAt : 0,
+      tokenExpiresAt: expiresIn ? capturedAt + expiresIn * 1000 : 0,
+      // Refresh token intentionally is not persisted in the public plugin build.
+      // The desktop plugin contains no client_secret, so automatic refresh is deferred
+      // until it can be implemented without shipping a reusable secret.
+      oauthRefreshToken: '',
+      oauthAuthMethod: 'yandex-pkce'
+    });
+    clearYandexOAuthAuthRequired();
+    dashboardDataCache = { token: '', at: 0, data: null };
+    dashboardPresenceCache = { token: '', at: 0, devices: [], groups: [] };
+    return { devices, expiresIn, scope: String(data.scope || '') };
+  } catch (e) {
+    if (e?.name === 'AbortError') throw new Error('Яндекс OAuth не ответил за 15 секунд.');
+    throw e;
+  } finally { clearTimeout(timer); }
+}
+function handleYandexOAuthCallback(req, res) {
+  (async () => {
+    const u = new URL(req.url, YANDEX_OAUTH_REDIRECT_URI);
+    if (u.pathname !== YANDEX_OAUTH_CALLBACK_PATH) { res.writeHead(404); res.end('Not found'); return; }
+    const session = yandexOAuthSession;
+    if (!session || Date.now() > Number(session.expiresAt || 0)) {
+      if (session) finishOAuthSession(session, 'error', 'Время авторизации истекло. Запустите вход ещё раз.');
+      res.writeHead(410, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}); res.end(oauthHtml('Авторизация устарела','Запустите вход через Яндекс ещё раз.',false)); return;
+    }
+    if (session.status !== 'waiting' || session.consumedAt) {
+      res.writeHead(409, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}); res.end(oauthHtml('Ссылка уже использована','Вернитесь в панель Stream Dock. Для нового входа запустите авторизацию ещё раз.',false)); return;
+    }
+    const state = String(u.searchParams.get('state') || '');
+    if (!state || state !== session.state) {
+      finishOAuthSession(session, 'error', 'Не удалось проверить состояние OAuth-сессии.');
+      res.writeHead(400, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}); res.end(oauthHtml('Ошибка авторизации',session.message,false)); return;
+    }
+    const oauthErrorCode = String(u.searchParams.get('error') || '').trim();
+    const oauthErrorDescription = String(u.searchParams.get('error_description') || '').trim();
+    if (oauthErrorCode || oauthErrorDescription) {
+      const cancelled = /access_denied|cancel/i.test(`${oauthErrorCode} ${oauthErrorDescription}`);
+      const message = cancelled ? 'Авторизация отменена. Если захотите подключиться позже, нажмите «Войти через Яндекс» ещё раз.' : (oauthErrorDescription || oauthErrorCode || 'Яндекс не предоставил доступ.');
+      finishOAuthSession(session, 'error', message);
+      res.writeHead(400, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}); res.end(oauthHtml(cancelled?'Авторизация отменена':'Доступ не предоставлен',message,false)); return;
+    }
+    const code = String(u.searchParams.get('code') || '').trim();
+    if (!code) {
+      finishOAuthSession(session, 'error', 'Яндекс не вернул код подтверждения.');
+      res.writeHead(400, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}); res.end(oauthHtml('Ошибка авторизации',session.message,false)); return;
+    }
+    session.consumedAt = Date.now();
+    session.status='exchanging'; session.message='Получаю OAuth-токен и проверяю доступ к Умному дому…';
+    try {
+      const result = await exchangeYandexOAuthCode(session, code);
+      finishOAuthSession(session, 'success', `Подключено. Получено устройств: ${result.devices}.`, {devices: result.devices});
+      logLine('YANDEX_OAUTH_SUCCESS',`devices=${result.devices}`,`expiresIn=${result.expiresIn||0}`);
+      res.writeHead(200, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
+      res.end(oauthHtml('Яндекс подключён', 'Авторизация завершена. Токен сохранён в плагине автоматически.', true));
+    } catch (e) {
+      finishOAuthSession(session, 'error', e?.message||'Не удалось завершить авторизацию.');
+      errorLine('YANDEX_OAUTH_EXCHANGE_ERROR',session.message);
+      res.writeHead(500, {'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
+      res.end(oauthHtml('Не удалось подключиться', session.message, false));
+    }
+  })().catch(e => { try { res.writeHead(500, {'Content-Type':'text/plain; charset=utf-8'}); res.end(e?.message||String(e)); } catch (_) {} });
+}
+function ensureYandexOAuthCallbackServer() {
+  if (yandexOAuthCallbackReady && yandexOAuthCallbackServer) return Promise.resolve();
+  if (yandexOAuthCallbackServer) return new Promise((resolve,reject)=>{
+    const timeout=setTimeout(()=>reject(new Error('Локальный OAuth-сервер не запустился.')),2500);
+    yandexOAuthCallbackServer.once('listening',()=>{clearTimeout(timeout);resolve();});
+    yandexOAuthCallbackServer.once('error',e=>{clearTimeout(timeout);reject(e);});
+  });
+  return new Promise((resolve,reject)=>{
+    const server=http.createServer(handleYandexOAuthCallback);
+    yandexOAuthCallbackServer=server;
+    const onError=e=>{yandexOAuthCallbackReady=false;yandexOAuthCallbackServer=null;reject(new Error(e?.code==='EADDRINUSE'?`Порт ${YANDEX_OAUTH_CALLBACK_PORT} занят другим приложением.`:(e?.message||String(e))));};
+    server.once('error',onError);
+    server.listen(YANDEX_OAUTH_CALLBACK_PORT,YANDEX_OAUTH_CALLBACK_HOST,()=>{
+      server.removeListener('error',onError);
+      server.on('error',e=>errorLine('YANDEX_OAUTH_CALLBACK_SERVER_ERROR',e?.message||String(e)));
+      yandexOAuthCallbackReady=true;
+      logLine('YANDEX_OAUTH_CALLBACK',YANDEX_OAUTH_REDIRECT_URI);
+      resolve();
+    });
+  });
+}
+async function startYandexOAuthLogin() {
+  await ensureYandexOAuthCallbackServer();
+  if (yandexOAuthSession && !['success','error'].includes(String(yandexOAuthSession.status||''))) {
+    finishOAuthSession(yandexOAuthSession, 'error', 'Предыдущая попытка авторизации заменена новой.');
+  }
+  const codeVerifier = oauthRandomString(64);
+  const codeChallenge = oauthBase64Url(crypto.createHash('sha256').update(codeVerifier).digest());
+  const state = oauthRandomString(24);
+  const deviceId = oauthDeviceId();
+  const startedAt=Date.now();
+  yandexOAuthSession={status:'waiting',message:'Ожидаю подтверждения в браузере…',state,codeVerifier,deviceId,startedAt,expiresAt:startedAt+YANDEX_OAUTH_SESSION_TTL_MS,consumedAt:0,completedAt:0,authorizationUrl:'',browserOpened:true};
+  const authUrl=new URL(YANDEX_OAUTH_AUTHORIZE_URL);
+  authUrl.searchParams.set('response_type','code');
+  authUrl.searchParams.set('client_id',YANDEX_OAUTH_CLIENT_ID);
+  authUrl.searchParams.set('redirect_uri',YANDEX_OAUTH_REDIRECT_URI);
+  authUrl.searchParams.set('state',state);
+  authUrl.searchParams.set('code_challenge',codeChallenge);
+  authUrl.searchParams.set('code_challenge_method','S256');
+  authUrl.searchParams.set('device_id',deviceId);
+  authUrl.searchParams.set('device_name',oauthDeviceName());
+  authUrl.searchParams.set('force_confirm','yes');
+  yandexOAuthSession.authorizationUrl = authUrl.toString();
+  const browserOpened = openExternalBrowser(yandexOAuthSession.authorizationUrl);
+  yandexOAuthSession.browserOpened = Boolean(browserOpened);
+  if (!browserOpened) {
+    yandexOAuthSession.message = 'Не удалось автоматически открыть браузер. Нажмите «Открыть страницу авторизации» ниже.';
+    errorLine('YANDEX_OAUTH_BROWSER_OPEN_FAILED', 'Автоматическое открытие браузера не удалось.');
+  }
+  return oauthStatusSnapshot();
+}
+
+function versionParts(value){
+  const clean=String(value||'').trim().replace(/^v/i,'').split('-')[0];
+  return clean.split('.').slice(0,4).map(x=>Math.max(0,parseInt(x,10)||0));
+}
+function compareVersions(left,right){
+  const a=versionParts(left),b=versionParts(right),n=Math.max(a.length,b.length,3);
+  for(let i=0;i<n;i++){const av=Number(a[i]||0),bv=Number(b[i]||0);if(av>bv)return 1;if(av<bv)return -1;}
+  return 0;
+}
+async function githubLatestRelease(force=false){
+  if(!force&&updateCheckCache.data&&Date.now()-updateCheckCache.at<UPDATE_CHECK_CACHE_MS)return updateCheckCache.data;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),8000);
+  try{
+    const response=await fetch(GITHUB_LATEST_RELEASE_API,{
+      headers:{
+        'Accept':'application/vnd.github+json',
+        'User-Agent':`n-bord-yandex-smart-home-stream-dock/${DASHBOARD_VERSION}`,
+        'X-GitHub-Api-Version':'2022-11-28'
+      },
+      signal:controller.signal
+    });
+    if(response.status===404){
+      const data={ok:true,currentVersion:DASHBOARD_VERSION,latestVersion:'',updateAvailable:false,currentIsNewer:false,releasesUrl:GITHUB_RELEASES_URL,checkedAt:Date.now(),release:null,message:'На GitHub пока нет опубликованных релизов.'};
+      updateCheckCache={at:Date.now(),data};return data;
+    }
+    const body=await response.json().catch(()=>null);
+    if(!response.ok){const err=new Error(body?.message||`GitHub API HTTP ${response.status}`);err.httpStatus=response.status;throw err;}
+    const latestVersion=String(body?.tag_name||'').replace(/^v/i,'').trim();
+    const cmp=latestVersion?compareVersions(DASHBOARD_VERSION,latestVersion):0;
+    const assets=(Array.isArray(body?.assets)?body.assets:[]).map(a=>({name:String(a?.name||''),size:Number(a?.size)||0,downloadCount:Number(a?.download_count)||0,url:String(a?.browser_download_url||'')}));
+    const data={
+      ok:true,currentVersion:DASHBOARD_VERSION,latestVersion,updateAvailable:cmp<0,currentIsNewer:cmp>0,releasesUrl:GITHUB_RELEASES_URL,checkedAt:Date.now(),
+      release:{
+        tagName:String(body?.tag_name||''),name:String(body?.name||body?.tag_name||'Последний релиз'),publishedAt:String(body?.published_at||body?.created_at||''),htmlUrl:String(body?.html_url||GITHUB_RELEASES_URL),body:String(body?.body||'').slice(0,16000),prerelease:Boolean(body?.prerelease),assets
+      },
+      message:cmp<0?`Доступно обновление ${body?.tag_name||latestVersion}.`:cmp>0?'Установленная версия новее последнего опубликованного релиза.':'Установлена актуальная версия.'
+    };
+    updateCheckCache={at:Date.now(),data};
+    return data;
+  }catch(e){
+    if(e?.name==='AbortError')throw new Error('GitHub не ответил за 8 секунд. Проверьте подключение к интернету.');
+    throw e;
+  }finally{clearTimeout(timeout);}
+}
 
 function dashboardMime(filePath){
   const ext=path.extname(filePath).toLowerCase();
@@ -2880,7 +3450,7 @@ async function performDashboardCommand(payload, explicitToken=''){
   else if(kind==='lightPreset'){const snap=await readTargetSnapshot(token,targetType,id);if(snap.online===false)throw new Error('Устройство не в сети.');if(snap.hasOnOff&&snap.power!==true)await setTargetPower(token,targetType,id,true);if(snap.brightness&&Number.isFinite(Number(payload.brightness)))await setTargetRange(token,targetType,id,'brightness',Math.max(snap.brightness.min,Math.min(snap.brightness.max,Number(payload.brightness))),false);if(payload.color&&snap.color&&(snap.color.supportsRgb||snap.color.supportsHsv)){const rgb=COLOR_PRESETS[String(payload.color)]??COLOR_PRESETS.white;if(snap.color.supportsRgb)await setTargetColor(token,targetType,id,'rgb',rgb);else await setTargetColor(token,targetType,id,'hsv',rgbIntToHsv(rgb));}else if(Number.isFinite(Number(payload.temperature))&&snap.color?.supportsTemperature)await setTargetColor(token,targetType,id,'temperature_k',Math.max(snap.color.temperatureMin,Math.min(snap.color.temperatureMax,Number(payload.temperature))));}
   else if(kind==='scenario'){const scenarioId=String(payload.scenarioId||'');await runScenario(token,scenarioId);recordScenarioUsageById(scenarioId,'panel');}
   else throw new Error('Неизвестная команда панели.');
-  userInfoCache={token:'',at:0,data:null};
+  invalidateSharedSnapshots(token);
 }
 function diagnosticsLogTail(maxLines=320){
   try{
@@ -2895,6 +3465,7 @@ function diagnosticsChecks(){
   const hasToken=Boolean(String(globalSettings.token||'').trim());
   return [
     {id:'backend',name:'Backend',ok:true,value:`PID ${process.pid} · ${process.version}`},
+    {id:'platform',name:'Платформа',ok:true,value:`${SYSTEM_LABEL} · ${process.arch}`},
     {id:'streamdock',name:'Stream Dock',ok:Boolean(ws.handshakeDone),value:ws.handshakeDone?'WebSocket подключен':'Нет соединения'},
     {id:'dashboard',name:'Локальная панель',ok:Boolean(dashboardHttpPort),value:dashboardHttpPort?`127.0.0.1:${dashboardHttpPort}`:'Не запущена'},
     {id:'token',name:'OAuth-токен',ok:hasToken,value:hasToken?`Сохранён · ${tokenExpiryLabel()}`:'Не сохранён'},
@@ -2929,14 +3500,32 @@ async function runDiagnosticsTests(){
   return {results,passed:results.filter(x=>x.ok).length,total:results.length,durationMs:Date.now()-started,at:Date.now()};
 }
 function readSystemClipboard(){
-  try{const r=spawnSync('/usr/bin/pbpaste',[],{encoding:'utf8',timeout:1200,maxBuffer:2*1024*1024});if(r.error)throw r.error;return String(r.stdout||'');}catch(e){errorLine('CLIPBOARD_READ_ERROR',e?.message||String(e));return null;}
+  try{
+    if(IS_WINDOWS){
+      const r=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command','Get-Clipboard -Raw'],{encoding:'utf8',timeout:1800,maxBuffer:2*1024*1024,windowsHide:true});
+      if(r.error)throw r.error;return String(r.stdout||'');
+    }
+    const r=spawnSync('/usr/bin/pbpaste',[],{encoding:'utf8',timeout:1200,maxBuffer:2*1024*1024});if(r.error)throw r.error;return String(r.stdout||'');
+  }catch(e){errorLine('CLIPBOARD_READ_ERROR',e?.message||String(e));return null;}
 }
 function writeSystemClipboard(value){
-  try{const r=spawnSync('/usr/bin/pbcopy',[],{input:String(value??''),encoding:'utf8',timeout:1200,maxBuffer:2*1024*1024});if(r.error)throw r.error;return r.status===0;}catch(e){errorLine('CLIPBOARD_WRITE_ERROR',e?.message||String(e));return false;}
+  try{
+    if(IS_WINDOWS){
+      const r=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command','Set-Clipboard -Value ([Console]::In.ReadToEnd())'],{input:String(value??''),encoding:'utf8',timeout:1800,maxBuffer:2*1024*1024,windowsHide:true});
+      if(r.error)throw r.error;return r.status===0;
+    }
+    const r=spawnSync('/usr/bin/pbcopy',[],{input:String(value??''),encoding:'utf8',timeout:1200,maxBuffer:2*1024*1024});if(r.error)throw r.error;return r.status===0;
+  }catch(e){errorLine('CLIPBOARD_WRITE_ERROR',e?.message||String(e));return false;}
 }
 
-function openLogsInFinder(){
-  try{const child=spawn('/usr/bin/open',['-R',LOG_FILE],{detached:true,stdio:'ignore'});child.unref();return true;}catch(e){errorLine('OPEN_LOGS_ERROR',e?.message||String(e));return false;}
+function openLogsInFileManager(){
+  try{
+    if(!fs.existsSync(LOG_FILE))fs.writeFileSync(LOG_FILE,'');
+    const child=IS_WINDOWS
+      ? spawn('explorer.exe',[`/select,${LOG_FILE}`],{detached:true,stdio:'ignore',windowsHide:true})
+      : spawn('/usr/bin/open',['-R',LOG_FILE],{detached:true,stdio:'ignore'});
+    child.unref();return true;
+  }catch(e){errorLine('OPEN_LOGS_ERROR',e?.message||String(e));return false;}
 }
 function startDashboardHttpServer(){
   if(dashboardHttpServer)return;
@@ -2949,16 +3538,17 @@ function startDashboardHttpServer(){
       if(u.pathname==='/api/diagnostics/log'&&req.method==='GET')return jsonResponse(res,200,{debugMode:Boolean(globalSettings.debugMode),log:diagnosticsLogTail(Number(u.searchParams.get('lines'))||320),logSize:diagnosticsLogSize(),at:Date.now()});
       if(u.pathname==='/api/diagnostics/debug'&&req.method==='POST'){const body=await readJsonBody(req);const enabled=Boolean(body.enabled);setGlobalSettings({debugMode:enabled});if(enabled)logLine('DEBUG_MODE','on');return jsonResponse(res,200,{ok:true,enabled});}
       if(u.pathname==='/api/diagnostics/clear-log'&&req.method==='POST'){try{fs.writeFileSync(LOG_FILE,'');return jsonResponse(res,200,{ok:true});}catch(e){errorLine('CLEAR_LOG_ERROR',e?.message||String(e));return jsonResponse(res,500,{ok:false,message:e?.message||'Не удалось очистить лог.'});}}
-      if(u.pathname==='/api/diagnostics/open-logs'&&req.method==='POST'){const ok=openLogsInFinder();return jsonResponse(res,ok?200:500,{ok,message:ok?'Файл журнала открыт в Finder.':'Не удалось открыть Finder.'});}
+      if(u.pathname==='/api/diagnostics/open-logs'&&req.method==='POST'){const ok=openLogsInFileManager();return jsonResponse(res,ok?200:500,{ok,message:ok?'Файл журнала открыт в проводнике.':'Не удалось открыть файл журнала.'});}
       if(u.pathname==='/api/diagnostics/tests'&&req.method==='POST'){const result=await runDiagnosticsTests();return jsonResponse(res,200,result);}
       if(u.pathname==='/api/plugin/reset'&&req.method==='POST'){const result=resetPluginCompletely();return jsonResponse(res,200,result);}
+      if(u.pathname==='/api/update-check'&&req.method==='GET'){try{return jsonResponse(res,200,await githubLatestRelease(u.searchParams.get('force')==='1'));}catch(e){errorLine('UPDATE_CHECK_ERROR',e?.message||String(e));return jsonResponse(res,502,{ok:false,currentVersion:DASHBOARD_VERSION,releasesUrl:GITHUB_RELEASES_URL,message:e?.message||'Не удалось проверить обновления.'});}}
       if(u.pathname==='/api/history'&&req.method==='GET'){return jsonResponse(res,200,sensorHistoryQuery(u.searchParams.get('deviceId')||'',u.searchParams.get('instance')||'',Number(u.searchParams.get('hours'))||1));}
       if(u.pathname==='/api/usage'&&req.method==='GET'){return jsonResponse(res,200,usageStatsSnapshot(Number(u.searchParams.get('days'))||7));}
       if(u.pathname==='/api/usage/settings'&&req.method==='POST'){const body=await readJsonBody(req);setGlobalSettings({usageStatsEnabled:Boolean(body.enabled)});return jsonResponse(res,200,usageStatsSnapshot(Number(body.days)||7));}
       if(u.pathname==='/api/usage/clear'&&req.method==='POST'){return jsonResponse(res,200,clearUsageStats());}
       if(u.pathname==='/api/snapshot'){
         const cached=dashboardDataCache.data&&dashboardDataCache.token===String(globalSettings.token||'').trim()?dashboardDataCache.data:null;
-        return jsonResponse(res,200,{version:DASHBOARD_VERSION,globalSettings:{token:globalSettings.token||'',tokenExpiresAt:Number(globalSettings.tokenExpiresAt)||0,tokenLifetimeSeconds:Number(globalSettings.tokenLifetimeSeconds)||0,tokenExpiryCapturedAt:Number(globalSettings.tokenExpiryCapturedAt)||0,dashboardPrefs:globalSettings.dashboardPrefs||null,actionRefreshSeconds:normalizeActionRefreshSeconds(globalSettings.actionRefreshSeconds)},devices:cached?.devices||[],groups:cached?.groups||[],scenarios:cached?.scenarios||[],rooms:cached?.rooms||[],dashboardCacheAt:cached?dashboardDataCache.at:0,backendReady:true,status:{text:cached?'Панель готова · показываю последние данные':'Панель подключена напрямую к backend',cls:'ok'}});
+        const storedTokenExpired=Boolean(globalSettings.token)&&Number(globalSettings.tokenExpiresAt)>0&&Number(globalSettings.tokenExpiresAt)<=Date.now();const authRequired=Boolean(yandexOAuthAuthRequiredAt||storedTokenExpired);return jsonResponse(res,200,{version:DASHBOARD_VERSION,platform:process.platform,systemLabel:SYSTEM_LABEL,authRequired,globalSettings:{token:globalSettings.token||'',tokenExpiresAt:Number(globalSettings.tokenExpiresAt)||0,tokenLifetimeSeconds:Number(globalSettings.tokenLifetimeSeconds)||0,tokenExpiryCapturedAt:Number(globalSettings.tokenExpiryCapturedAt)||0,oauthAuthMethod:String(globalSettings.oauthAuthMethod||''),dashboardPrefs:globalSettings.dashboardPrefs||null,actionRefreshSeconds:normalizeActionRefreshSeconds(globalSettings.actionRefreshSeconds)},devices:cached?.devices||[],groups:cached?.groups||[],scenarios:cached?.scenarios||[],rooms:cached?.rooms||[],dashboardCacheAt:cached?dashboardDataCache.at:0,backendReady:true,status:authRequired?{text:'Требуется повторная авторизация через Яндекс.',cls:'error'}:{text:cached?'Панель готова · показываю последние данные':'Панель подключена напрямую к backend',cls:'ok'}});
       }
       if(u.pathname==='/api/devices'){const token=String(globalSettings.token||'').trim();if(!token)return jsonResponse(res,401,{message:'OAuth-токен не сохранён.'});const data=await buildDashboardData(token,u.searchParams.get('force')==='1');return jsonResponse(res,200,data);}
       if(u.pathname==='/api/presence'){const token=String(globalSettings.token||'').trim();if(!token)return jsonResponse(res,401,{message:'OAuth-токен не сохранён.'});const data=await dashboardPresenceSnapshot(token,u.searchParams.get('force')==='1');return jsonResponse(res,200,data);}
@@ -2966,36 +3556,83 @@ function startDashboardHttpServer(){
       if(u.pathname==='/api/clipboard/write'&&req.method==='POST'){const payload=await readJsonBody(req);const ok=writeSystemClipboard(payload?.text??'');return jsonResponse(res,ok?200:500,ok?{ok:true}:{message:'Не удалось записать в буфер обмена.'});}
       if(u.pathname==='/api/entity-detail'&&req.method==='GET'){const token=String(globalSettings.token||'').trim();if(!token)return jsonResponse(res,401,{message:'OAuth-токен не сохранён.'});const deviceId=String(u.searchParams.get('deviceId')||'').trim();const targetType=String(u.searchParams.get('targetType')||'device')==='group'?'group':'device';if(!deviceId)return jsonResponse(res,400,{message:'Не указан идентификатор устройства.'});let entity={id:deviceId,...(await readTargetSnapshot(token,targetType,deviceId)||{})};if(targetType==='device')entity=decorateDevicesForDashboard([entity])[0]||entity;return jsonResponse(res,200,{ok:true,entity});}
       if(u.pathname==='/api/command'&&req.method==='POST'){const payload=await readJsonBody(req);await performDashboardCommand(payload);return jsonResponse(res,200,{ok:true,message:'Команда выполнена.'});}
-      if(u.pathname==='/api/token'&&req.method==='POST'){const body=await readJsonBody(req);const token=String(body.token||'').trim(),expiresIn=Math.max(0,Number(body.expiresIn)||0),sameToken=token&&token===String(globalSettings.token||'').trim();let tokenExpiresAt=sameToken?Math.max(0,Number(globalSettings.tokenExpiresAt)||0):0,tokenLifetimeSeconds=sameToken?Math.max(0,Number(globalSettings.tokenLifetimeSeconds)||0):0,tokenExpiryCapturedAt=sameToken?Math.max(0,Number(globalSettings.tokenExpiryCapturedAt)||0):0;if(token&&expiresIn>0){tokenLifetimeSeconds=expiresIn;tokenExpiryCapturedAt=Date.now();tokenExpiresAt=tokenExpiryCapturedAt+expiresIn*1000;}if(!token){tokenExpiresAt=0;tokenLifetimeSeconds=0;tokenExpiryCapturedAt=0;}setGlobalSettings({token,tokenExpiresAt,tokenLifetimeSeconds,tokenExpiryCapturedAt});return jsonResponse(res,200,{ok:true,hasToken:Boolean(token),tokenExpiry:tokenExpirySnapshot(token),message:token?'Токен сохранён.':'Токен удалён.'});}
+      if(u.pathname==='/api/oauth/yandex/start'&&req.method==='POST'){try{const status=await startYandexOAuthLogin();return jsonResponse(res,200,{ok:true,...status});}catch(e){errorLine('YANDEX_OAUTH_START_ERROR',e?.message||String(e));return jsonResponse(res,500,{ok:false,status:'error',message:e?.message||'Не удалось запустить авторизацию Яндекса.',redirectUri:YANDEX_OAUTH_REDIRECT_URI});}}
+      if(u.pathname==='/api/oauth/yandex/status'&&req.method==='GET')return jsonResponse(res,200,{ok:true,...oauthStatusSnapshot()});
+      if(u.pathname==='/api/token'&&req.method==='POST'){const body=await readJsonBody(req);const token=String(body.token||'').trim(),expiresIn=Math.max(0,Number(body.expiresIn)||0),sameToken=token&&token===String(globalSettings.token||'').trim();let tokenExpiresAt=sameToken?Math.max(0,Number(globalSettings.tokenExpiresAt)||0):0,tokenLifetimeSeconds=sameToken?Math.max(0,Number(globalSettings.tokenLifetimeSeconds)||0):0,tokenExpiryCapturedAt=sameToken?Math.max(0,Number(globalSettings.tokenExpiryCapturedAt)||0):0;if(token&&expiresIn>0){tokenLifetimeSeconds=expiresIn;tokenExpiryCapturedAt=Date.now();tokenExpiresAt=tokenExpiryCapturedAt+expiresIn*1000;}if(!token){tokenExpiresAt=0;tokenLifetimeSeconds=0;tokenExpiryCapturedAt=0;}const keepPkce=sameToken&&String(globalSettings.oauthAuthMethod||'')==='yandex-pkce';setGlobalSettings({token,tokenExpiresAt,tokenLifetimeSeconds,tokenExpiryCapturedAt,oauthRefreshToken:'',oauthAuthMethod:keepPkce?globalSettings.oauthAuthMethod:(token?'manual':'')});if(token){clearYandexOAuthAuthRequired();}else{yandexOAuthSession=null;clearYandexOAuthAuthRequired();}return jsonResponse(res,200,{ok:true,hasToken:Boolean(token),tokenExpiry:tokenExpirySnapshot(token),message:token?'Токен сохранён.':'Авторизация и OAuth-данные удалены.'});}
       if(u.pathname==='/api/preferences'&&req.method==='POST'){const body=await readJsonBody(req);const prefs=body&&typeof body.prefs==='object'&&body.prefs&&!Array.isArray(body.prefs)?body.prefs:{};setGlobalSettings({dashboardPrefs:prefs});return jsonResponse(res,200,{ok:true});}
       if(u.pathname==='/api/action-refresh'&&req.method==='POST'){const body=await readJsonBody(req);const actionRefreshSeconds=normalizeActionRefreshSeconds(body.actionRefreshSeconds);setGlobalSettings({actionRefreshSeconds});return jsonResponse(res,200,{ok:true,actionRefreshSeconds});}
       if(u.pathname==='/api/open-external'&&req.method==='POST'){const body=await readJsonBody(req);const url=String(body.url||'').trim();if(!/^https?:\/\//i.test(url))return jsonResponse(res,400,{ok:false,message:'Некорректная ссылка.'});openExternalBrowser(url);return jsonResponse(res,200,{ok:true});}
-      if(u.pathname==='/api/validate'&&req.method==='POST'){const body=await readJsonBody(req);const token=String(body.token||globalSettings.token||'').trim();if(!token)return jsonResponse(res,400,{valid:false,message:'Токен не указан.'});try{const info=await getUserInfo(token,true);return jsonResponse(res,200,{valid:true,tokenExpiry:tokenExpirySnapshot(token),message:`Токен работает. Устройств: ${normalizeDevices(info).length}`});}catch(e){errorLine('TOKEN_VALIDATE_ERROR',e?.message||String(e));return jsonResponse(res,400,{valid:false,message:e?.message||'Токен не прошёл проверку.'});}}
+      if(u.pathname==='/api/validate'&&req.method==='POST'){const body=await readJsonBody(req);const token=String(body.token||globalSettings.token||'').trim();if(!token)return jsonResponse(res,400,{valid:false,message:'Токен не указан.'});try{const info=await getUserInfo(token,true);if(token===String(globalSettings.token||'').trim())clearYandexOAuthAuthRequired();return jsonResponse(res,200,{valid:true,tokenExpiry:tokenExpirySnapshot(token),message:`Токен работает. Устройств: ${normalizeDevices(info).length}`});}catch(e){errorLine('TOKEN_VALIDATE_ERROR',e?.message||String(e));const status=e?.code==='YANDEX_AUTH_ERROR'?401:400;return jsonResponse(res,status,{valid:false,code:e?.code||'',message:e?.message||'Токен не прошёл проверку.'});}}
       let rel=u.pathname==='/'?'dashboard/index.html':u.pathname.replace(/^\//,'');
       if(rel==='dashboard')rel='dashboard/index.html';
       const file=path.resolve(pluginRoot,rel);if(!file.startsWith(pluginRoot+path.sep))return jsonResponse(res,403,{message:'Forbidden'});
       if(!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);res.end('Not found');return;}
       const body=fs.readFileSync(file);res.writeHead(200,{'Content-Type':dashboardMime(file),'Content-Length':body.length,'Cache-Control':'no-store'});res.end(body);
-    }catch(e){errorLine('DASHBOARD_HTTP_ERROR',e?.message||String(e));jsonResponse(res,500,{message:e?.message||'Ошибка локальной панели.'});}
+    }catch(e){errorLine('DASHBOARD_HTTP_ERROR',e?.message||String(e));const status=e?.code==='YANDEX_AUTH_ERROR'?401:500;jsonResponse(res,status,{message:e?.message||'Ошибка локальной панели.',code:e?.code||''});}
   });
   dashboardHttpServer.listen(0,'127.0.0.1',()=>{dashboardHttpPort=dashboardHttpServer.address()?.port||0;logLine('DASHBOARD_HTTP','port='+dashboardHttpPort);});
   dashboardHttpServer.on('error',e=>errorLine('DASHBOARD_HTTP_SERVER_ERROR',e?.message||String(e)));
 }
 function openExternalBrowser(url){
   const target=String(url||'').trim();
-  if(!/^https?:\/\//i.test(target)) return;
+  if(!/^https?:\/\//i.test(target)) return false;
   try{
+    if(IS_WINDOWS){
+      // Prefer PowerShell Start-Process. It delegates URLs to the user's default
+      // browser and behaves more consistently than explorer.exe inside Stream Dock.
+      try {
+        const env={...process.env,YSH_OPEN_URL:target};
+        const ps=spawnSync('powershell.exe',[
+          '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',
+          "Start-Process -FilePath $env:YSH_OPEN_URL -ErrorAction Stop"
+        ],{env,encoding:'utf8',timeout:5000,windowsHide:true,stdio:['ignore','pipe','pipe']});
+        if(!ps.error && ps.status===0){
+          logLine('OPEN_EXTERNAL_WINDOWS','powershell');
+          return true;
+        }
+        if(ps.error) errorLine('OPEN_EXTERNAL_WINDOWS_POWERSHELL_ERROR',ps.error.message||String(ps.error));
+        else if(ps.status!==0) errorLine('OPEN_EXTERNAL_WINDOWS_POWERSHELL_ERROR',String(ps.stderr||'').trim()||`exit=${ps.status}`);
+      } catch(e) { errorLine('OPEN_EXTERNAL_WINDOWS_POWERSHELL_ERROR',e?.message||String(e)); }
+
+      // Native Windows URL protocol handler fallback.
+      try {
+        const rd=spawnSync('rundll32.exe',['url.dll,FileProtocolHandler',target],{
+          encoding:'utf8',timeout:5000,windowsHide:true,stdio:['ignore','pipe','pipe']
+        });
+        if(!rd.error && rd.status===0){
+          logLine('OPEN_EXTERNAL_WINDOWS','rundll32');
+          return true;
+        }
+        if(rd.error) errorLine('OPEN_EXTERNAL_WINDOWS_RUNDLL32_ERROR',rd.error.message||String(rd.error));
+      } catch(e) { errorLine('OPEN_EXTERNAL_WINDOWS_RUNDLL32_ERROR',e?.message||String(e)); }
+
+      // Last native fallback. explorer.exe can open URLs on most Windows setups.
+      try {
+        const ex=spawn('explorer.exe',[target],{detached:true,stdio:'ignore',windowsHide:true});
+        ex.unref();
+        logLine('OPEN_EXTERNAL_WINDOWS','explorer');
+        return true;
+      } catch(e) { errorLine('OPEN_EXTERNAL_WINDOWS_EXPLORER_ERROR',e?.message||String(e)); }
+
+      try{send({event:'openUrl',payload:{url:target}});}catch(_){}
+      return false;
+    }
     const child=spawn('/usr/bin/open',[target],{detached:true,stdio:'ignore'});
     child.unref();
+    return true;
   }catch(e){
     errorLine('OPEN_EXTERNAL_ERROR',e?.message||String(e));
-    send({event:'openUrl',payload:{url:target}});
+    try{send({event:'openUrl',payload:{url:target}});}catch(_){}
+    return false;
   }
 }
-const DASHBOARD_STATE_FILE = path.join(process.env.TMPDIR || '/tmp', 'nbord-yandex-smarthome-streamdock-dashboard.json');
-const DASHBOARD_LOCK_FILE = path.join(process.env.TMPDIR || '/tmp', 'nbord-yandex-smarthome-streamdock-dashboard.lock');
-const DASHBOARD_FOCUS_FILE = path.join(process.env.TMPDIR || '/tmp', 'nbord-yandex-smarthome-streamdock-dashboard.focus');
-const DASHBOARD_DEBUG_FLAG_FILE = path.join(process.env.TMPDIR || '/tmp', `nbord-yandex-smarthome-streamdock-dashboard-debug-${process.pid}.flag`);
+
+
+const DASHBOARD_TEMP_DIR = os.tmpdir();
+const DASHBOARD_STATE_FILE = path.join(DASHBOARD_TEMP_DIR, 'nbord-yandex-smarthome-streamdock-dashboard.json');
+const DASHBOARD_LOCK_FILE = path.join(DASHBOARD_TEMP_DIR, 'nbord-yandex-smarthome-streamdock-dashboard.lock');
+const DASHBOARD_FOCUS_FILE = path.join(DASHBOARD_TEMP_DIR, 'nbord-yandex-smarthome-streamdock-dashboard.focus');
+const DASHBOARD_DEBUG_FLAG_FILE = path.join(DASHBOARD_TEMP_DIR, `nbord-yandex-smarthome-streamdock-dashboard-debug-${process.pid}.flag`);
 function syncDashboardDebugFlag(){
   try{
     if(debugLoggingEnabled) fs.writeFileSync(DASHBOARD_DEBUG_FLAG_FILE,'1');
@@ -3009,10 +3646,11 @@ function readDashboardState(){try{const x=JSON.parse(fs.readFileSync(DASHBOARD_S
 function writeDashboardState(state){try{fs.writeFileSync(DASHBOARD_STATE_FILE,JSON.stringify(state));}catch(_){} }
 function clearDashboardState(){try{fs.unlinkSync(DASHBOARD_STATE_FILE);}catch(_){} }
 function dashboardBackendAlive(url){return new Promise(resolve=>{try{const u=new URL(String(url||''));u.pathname='/api/snapshot';u.search='';const req=http.get(u,{timeout:650},res=>{res.resume();resolve(res.statusCode>=200&&res.statusCode<500);});req.on('timeout',()=>{req.destroy();resolve(false);});req.on('error',()=>resolve(false));}catch(_){resolve(false);}});}
-function focusDashboardProcess(pid){try{const n=Number(pid);const stamp=JSON.stringify({pid:n,at:Date.now(),nonce:Math.random().toString(36).slice(2)});fs.writeFileSync(DASHBOARD_FOCUS_FILE,stamp);const notification='com.yandex.smarthome.streamdock.dashboard.focus.'+n;const code=`ObjC.import('Cocoa');try{$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('${notification}',null,null,true);}catch(e){};var a=$.NSRunningApplication.runningApplicationWithProcessIdentifier(${n});if(a){a.activateWithOptions($.NSApplicationActivateAllWindows|$.NSApplicationActivateIgnoringOtherApps);}`;const c=spawn('/usr/bin/osascript',['-l','JavaScript','-e',code],{detached:true,stdio:'ignore'});c.unref();logLine('DASHBOARD_NATIVE_FOCUS','pid='+pid,'focusFile='+DASHBOARD_FOCUS_FILE);return true;}catch(e){errorLine('DASHBOARD_NATIVE_FOCUS_ERROR',e?.message||String(e));return false;}}
+function focusDashboardProcess(pid){if(!IS_MAC)return false;try{const n=Number(pid);const stamp=JSON.stringify({pid:n,at:Date.now(),nonce:Math.random().toString(36).slice(2)});fs.writeFileSync(DASHBOARD_FOCUS_FILE,stamp);const notification='com.yandex.smarthome.streamdock.dashboard.focus.'+n;const code=`ObjC.import('Cocoa');try{$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('${notification}',null,null,true);}catch(e){};var a=$.NSRunningApplication.runningApplicationWithProcessIdentifier(${n});if(a){a.activateWithOptions($.NSApplicationActivateAllWindows|$.NSApplicationActivateIgnoringOtherApps);}`;const c=spawn('/usr/bin/osascript',['-l','JavaScript','-e',code],{detached:true,stdio:'ignore'});c.unref();logLine('DASHBOARD_NATIVE_FOCUS','pid='+pid,'focusFile='+DASHBOARD_FOCUS_FILE);return true;}catch(e){errorLine('DASHBOARD_NATIVE_FOCUS_ERROR',e?.message||String(e));return false;}}
 function acquireDashboardLaunchLock(){try{const fd=fs.openSync(DASHBOARD_LOCK_FILE,'wx');fs.closeSync(fd);return true;}catch(_){try{const st=fs.statSync(DASHBOARD_LOCK_FILE);if(Date.now()-st.mtimeMs>3000){fs.unlinkSync(DASHBOARD_LOCK_FILE);const fd=fs.openSync(DASHBOARD_LOCK_FILE,'wx');fs.closeSync(fd);return true;}}catch(__){}return false;}}
 function releaseDashboardLaunchLock(){try{fs.unlinkSync(DASHBOARD_LOCK_FILE);}catch(_){} }
 function cleanupOrphanDashboardHelpers(keepPid=0){
+  if(!IS_MAC)return 0;
   try{
     const script=path.join(__dirname,'dashboard-window.jxa.js');
     const out=spawnSync('/bin/ps',['-axo','pid=,command='],{encoding:'utf8',timeout:1500});
@@ -3028,8 +3666,95 @@ function cleanupOrphanDashboardHelpers(keepPid=0){
     return killed;
   }catch(e){errorLine('DASHBOARD_NATIVE_ORPHAN_CLEANUP_ERROR',e?.message||String(e));return 0;}
 }
+function windowsEdgeCandidates(){
+  const roots=[process.env['ProgramFiles(x86)'],process.env.ProgramFiles,process.env.LOCALAPPDATA].filter(Boolean);
+  const out=[];
+  for(const root of roots){out.push(path.join(root,'Microsoft','Edge','Application','msedge.exe'));}
+  return out;
+}
+function findDashboardWindowsPid(){
+  if(!IS_WINDOWS)return 0;
+  try{
+    const script=[
+      "$ErrorActionPreference='SilentlyContinue'",
+      "$p=Get-Process msedge | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like '*Яндекс Умный дом*' } | Select-Object -First 1",
+      "if($p){ Write-Output $p.Id }"
+    ].join('; ');
+    const out=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{
+      encoding:'utf8',windowsHide:true,timeout:1800
+    });
+    return Number(String(out.stdout||'').trim().split(/\r?\n/).pop())||0;
+  }catch(e){debugLine('DASHBOARD_WINDOWS_FIND_WARN',e?.message||String(e));return 0;}
+}
+function focusExistingDashboardWindows(){
+  if(!IS_WINDOWS)return false;
+  const pid=findDashboardWindowsPid();
+  if(!pid)return false;
+  try{
+    const script=`Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::AppActivate(${pid}) | Out-Null`;
+    spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{
+      encoding:'utf8',windowsHide:true,timeout:1800
+    });
+    logLine('DASHBOARD_WINDOWS_FOCUS','pid='+pid);
+    return true;
+  }catch(e){debugLine('DASHBOARD_WINDOWS_FOCUS_WARN',e?.message||String(e));return false;}
+}
+let dashboardWindowsLaunchInProgress=false;
+let dashboardWindowsLaunchStartedAt=0;
+function openDashboardWindows(url){
+  if(focusExistingDashboardWindows())return true;
+  try{
+    const edge=windowsEdgeCandidates().find(x=>{try{return fs.existsSync(x);}catch(_){return false;}});
+    if(edge){
+      const edgeProfile=path.join(PLUGIN_DATA_DIR,'dashboard-edge-profile');try{fs.mkdirSync(edgeProfile,{recursive:true});}catch(_){}const child=spawn(edge,[`--app=${url}`,'--new-window',`--user-data-dir=${edgeProfile}`],{detached:true,stdio:'ignore',windowsHide:true});
+      child.unref();
+      logLine('DASHBOARD_WINDOWS_EDGE_OPEN',url);
+      return true;
+    }
+  }catch(e){errorLine('DASHBOARD_WINDOWS_EDGE_ERROR',e?.message||String(e));}
+  try{openExternalBrowser(url);logLine('DASHBOARD_WINDOWS_BROWSER_OPEN',url);return true;}catch(e){errorLine('DASHBOARD_WINDOWS_BROWSER_ERROR',e?.message||String(e));return false;}
+}
 async function openDashboardFromKey(){
   startDashboardHttpServer();
+  if(IS_WINDOWS){
+    // Edge needs a short time to create the app window. During that interval the
+    // window has no usable title/handle yet, so repeated key presses used to
+    // start several copies. Keep a launch guard active until the first window
+    // becomes visible (or until the timeout expires).
+    if(dashboardWindowsLaunchInProgress){
+      if(focusExistingDashboardWindows()){
+        logLine('DASHBOARD_WINDOWS_OPEN_REUSED','window became ready while launch was in progress');
+      }else{
+        logLine('DASHBOARD_WINDOWS_OPEN_SKIPPED','launch already in progress','ageMs='+(Date.now()-dashboardWindowsLaunchStartedAt));
+      }
+      return;
+    }
+    if(focusExistingDashboardWindows())return;
+
+    dashboardWindowsLaunchInProgress=true;
+    dashboardWindowsLaunchStartedAt=Date.now();
+    try{
+      let wait=0;while(!dashboardHttpPort&&wait<2500){await new Promise(r=>setTimeout(r,80));wait+=80;}
+      if(!dashboardHttpPort){errorLine('DASHBOARD_WINDOWS_ERROR','Локальный сервер панели не запущен.');return;}
+      if(focusExistingDashboardWindows())return;
+
+      const url=`http://127.0.0.1:${dashboardHttpPort}/dashboard/index.html?standalone=1&native=0&platform=windows&v=${encodeURIComponent(DASHBOARD_VERSION)}`;
+      if(!openDashboardWindows(url))return;
+
+      // Keep the guard until Edge exposes a real app window. This is deliberately
+      // bounded so the user can retry if Edge failed to start for some reason.
+      const readyDeadline=Date.now()+8000;
+      while(Date.now()<readyDeadline){
+        await new Promise(r=>setTimeout(r,250));
+        const pid=findDashboardWindowsPid();
+        if(pid){logLine('DASHBOARD_WINDOWS_READY','pid='+pid,'startupMs='+(Date.now()-dashboardWindowsLaunchStartedAt));break;}
+      }
+    }finally{
+      dashboardWindowsLaunchInProgress=false;
+      dashboardWindowsLaunchStartedAt=0;
+    }
+    return;
+  }
   const existing=readDashboardState();
   const existingMatchesVersion=existing&&String(existing.version||'')===DASHBOARD_VERSION;
   if(existingMatchesVersion&&dashboardProcessAlive(existing.pid)&&await dashboardBackendAlive(existing.url)){
@@ -3110,17 +3835,23 @@ ws.on('message', raw => {
       send({ event: 'setGlobalSettings', context: PLUGIN_UUID, payload: globalSettings });
       return;
     }
-    globalSettings = Object.assign({ token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS }, incoming && typeof incoming === 'object' ? incoming : {});
+    globalSettings = Object.assign({ token: '', tokenExpiresAt: 0, tokenLifetimeSeconds: 0, tokenExpiryCapturedAt: 0, oauthRefreshToken: '', oauthDeviceId: '', oauthAuthMethod: '', actionRefreshSeconds: DEFAULT_ACTION_REFRESH_SECONDS }, incoming && typeof incoming === 'object' ? incoming : {});
     globalSettings.token = String(globalSettings.token || '').trim();
     globalSettings.tokenExpiresAt = Math.max(0, Number(globalSettings.tokenExpiresAt) || 0);
     globalSettings.tokenLifetimeSeconds = Math.max(0, Number(globalSettings.tokenLifetimeSeconds) || 0);
     globalSettings.tokenExpiryCapturedAt = Math.max(0, Number(globalSettings.tokenExpiryCapturedAt) || 0);
+    const hadStoredRefreshToken = Boolean(String(globalSettings.oauthRefreshToken || '').trim());
+    // v1.1.0 release does not persist refresh tokens in the public plugin build.
+    globalSettings.oauthRefreshToken = '';
+    globalSettings.oauthDeviceId = String(globalSettings.oauthDeviceId || '').trim();
+    globalSettings.oauthAuthMethod = String(globalSettings.oauthAuthMethod || '').trim();
     globalSettings.actionRefreshSeconds = normalizeActionRefreshSeconds(globalSettings.actionRefreshSeconds);
     debugLoggingEnabled = globalSettings.debugMode === true;
     syncDashboardDebugFlag();
     globalSettingsReady = true;
+    if (hadStoredRefreshToken) send({ event: 'setGlobalSettings', context: PLUGIN_UUID, payload: globalSettings });
     if (debugLoggingEnabled) logLine('DEBUG_MODE', 'restored');
-    userInfoCache = { token: '', at: 0, data: null };
+    invalidateSharedSnapshots();
     scheduleActionRefresh();
     tryMigrateLegacyToken();
     for (const ctx of visibleContexts) {
@@ -3318,7 +4049,9 @@ ws.on('message', raw => {
     saveSettings(context, { powerMode });
     refreshToggle(context, data.action);
   } else if (command === 'refreshState') {
-    Promise.resolve(refreshAction(context, data.action))
+    const token = tokenForContext(context);
+    const refreshPromise = token ? getUserInfo(token, true).then(() => refreshAction(context, data.action)) : refreshAction(context, data.action);
+    Promise.resolve(refreshPromise)
       .then(() => sendToPropertyInspector(context, {
         type: 'stateRefreshed',
         message: 'Состояние обновлено.'

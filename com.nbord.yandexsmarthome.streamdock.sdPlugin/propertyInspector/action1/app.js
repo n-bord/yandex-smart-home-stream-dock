@@ -21,7 +21,7 @@
     media:'com.yandex.smarthome.streamdock.media.command',
     scenario:'com.yandex.smarthome.streamdock.scenario'
   };
-  const VERSION='1.0.0';
+  const VERSION='1.1.0';
   const $=id=>document.getElementById(id);
   function installTextEditingShortcuts(){document.addEventListener('keydown',async e=>{const el=e.target;if(!el||el.disabled||el.readOnly)return;const textLike=el.tagName==='TEXTAREA'||(el.tagName==='INPUT'&&['','text','password','search','email','url','tel'].includes(String(el.type||'text').toLowerCase()));if(!textLike)return;const mod=e.metaKey||e.ctrlKey,key=String(e.key||'').toLowerCase();if(mod&&key==='a'){e.preventDefault();e.stopPropagation();el.select();return;}if(mod&&key==='c'){const s=Number(el.selectionStart)||0,n=Number(el.selectionEnd)||0,txt=String(el.value||'').slice(Math.min(s,n),Math.max(s,n));if(txt&&navigator.clipboard?.writeText){e.preventDefault();e.stopPropagation();try{await navigator.clipboard.writeText(txt);}catch(_){}}return;}if(mod&&key==='v'&&navigator.clipboard?.readText){e.preventDefault();e.stopPropagation();try{const txt=await navigator.clipboard.readText(),s=Number(el.selectionStart)||0,n=Number(el.selectionEnd)||0;el.setRangeText(txt,s,n,'end');el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}return;}if((e.key==='Backspace'||e.key==='Delete')){try{let s=Number(el.selectionStart)||0,n=Number(el.selectionEnd)||0;if(s===n){if(mod){if(e.key==='Backspace')s=0;else n=String(el.value||'').length;}else if(e.key==='Backspace'&&s>0)s--;else if(e.key==='Delete'&&n<String(el.value||'').length)n++;else return;}e.preventDefault();e.stopPropagation();el.setRangeText('',s,n,'end');el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}return;}},true);}
 

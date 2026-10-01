@@ -12,7 +12,7 @@ button.primary:active:not(:disabled),.dashboard-btn:active:not(:disabled),#refre
 select{accent-color:var(--nb-accent)}
 .check-row input{accent-color:var(--nb-accent)}
 
-/* v1.14.1 — text selection and standard macOS editing shortcuts */
+/* v1.14.1 — text selection and standard desktop editing shortcuts */
 input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]),textarea{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default}
 
 
@@ -37,4 +37,18 @@ select:disabled,
 .action-settings input:disabled {
   border-color: #413957;
   background: #24212d;
+}
+
+
+/* Windows native select popup: Stream Dock renders the popup with a light OS
+   background even when the inspector itself is dark. Keep popup text readable. */
+select { color-scheme: dark; }
+select option {
+  background-color: #ffffff !important;
+  color: #171717 !important;
+}
+select optgroup {
+  background-color: #ffffff !important;
+  color: #5c5366 !important;
+  font-weight: 700;
 }
