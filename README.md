@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">
-    <img src="https://badgen.net/github/release/n-bord/yandex-smart-home-stream-dock?label=release" alt="GitHub Release">
+    <img src="https://badgen.net/github/tag/n-bord/yandex-smart-home-stream-dock?label=release&color=7C5CFF" alt="GitHub Release">
   </a>
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">
     <img src="https://badgen.net/github/assets-dl/n-bord/yandex-smart-home-stream-dock/total?color=34C759&label=downloads" alt="Downloads">
