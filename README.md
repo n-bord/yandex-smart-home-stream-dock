@@ -7,10 +7,10 @@
     <img src="https://img.shields.io/github/v/release/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=release&color=7C5CFF" alt="GitHub Release">
   </a>
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/releases">
-    <img src="https://img.shields.io/github/downloads/n-bord/yandex-smart-home-stream-dock/total?style=flat-square&label=downloads&color=34C759" alt="Downloads">
+    <img src="https://badgen.net/github/assets-dl/n-bord/yandex-smart-home-stream-dock/total?color=34C759&label=downloads" alt="Downloads">
   </a>
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/stargazers">
-    <img src="https://img.shields.io/github/stars/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=stars&color=F5C542" alt="GitHub Stars">
+    <img src="https://badgen.net/github/stars/n-bord/yandex-smart-home-stream-dock?color=F5C542&label=stars" alt="GitHub Stars">
   </a>
   <a href="https://github.com/n-bord/yandex-smart-home-stream-dock/issues">
     <img src="https://img.shields.io/github/issues/n-bord/yandex-smart-home-stream-dock?style=flat-square&label=issues&color=5DADE2" alt="GitHub Issues">
